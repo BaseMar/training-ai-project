@@ -1,0 +1,4 @@
+# Reproducible analysis outputs generated locally by project scripts.
+outputs/eda_outputs/
+outputs/stage2_outputs/
+outputs/stage3_outputs/

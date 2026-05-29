@@ -68,8 +68,9 @@ training-ai-project/
 |   |-- main.py
 |   |-- models.py
 |   `-- session.py
-|-- notebooks/
+|-- scripts/
 |   `-- 01_eda.py
+|-- notebooks/
 |-- outputs/
 |   |-- eda_outputs/
 |   |-- stage2_outputs/
@@ -86,7 +87,8 @@ Opis katalogów:
 
 - `generator/` - moduł generowania syntetycznych danych treningowych.
 - `data/` - kanoniczny zbiór danych projektu: `FINAL_ENGINE_V4.csv`.
-- `notebooks/` - analizy i etapy eksperymentalne; aktualnie dostępny jest `01_eda.py`.
+- `scripts/` - uruchamialne skrypty analityczne; aktualnie dostępny jest `01_eda.py`.
+- `notebooks/` - planowane notebooki dla kolejnych etapów analizy i demonstracji.
 - `src/` - planowane moduły pomocnicze do przetwarzania danych, inżynierii cech, trenowania modeli, rekomendacji i reguł bezpieczeństwa.
 - `models/` - planowany katalog na zapisane modele predykcyjne, np. `best_weight_prediction_model.joblib`.
 - `outputs/` - katalogi na wyniki EDA, modelowania i demonstratora.
@@ -100,7 +102,7 @@ Planowane notebooki:
 - `notebooks/02_modeling_and_recommendation.ipynb` - model ML i system rekomendacyjny.
 - `notebooks/03_system_demo.ipynb` - demonstrator końcowy systemu.
 
-Obecnie w repozytorium znajduje się `notebooks/01_eda.py`, czyli skryptowa wersja
+Obecnie w repozytorium znajduje się `scripts/01_eda.py`, czyli skryptowa wersja
 pierwszego etapu EDA.
 
 ## Generator danych
@@ -196,8 +198,13 @@ data/FINAL_ENGINE_V4.csv
 Aktualnie dostępny jest pierwszy etap EDA jako skrypt:
 
 ```bash
-python notebooks/01_eda.py
+python scripts/01_eda.py
 ```
+
+Skrypt zapisuje lokalne wyniki EDA do `outputs/eda_outputs/`.
+Katalogi `outputs/*` zawierają odtwarzalne artefakty robocze i nie są commitowane.
+Wybrane finalne wykresy lub tabele do raportu mogą zostać później ręcznie
+przeniesione do `final_report/figures/` albo właściwego katalogu raportowego.
 
 TODO: dodać wersje notebookowe `.ipynb` dla etapów 1-3.
 
@@ -211,7 +218,8 @@ Projekt generuje lub docelowo będzie generował:
 - porównanie modeli predykcyjnych,
 - zapisany model, np. `models/best_weight_prediction_model.joblib`,
 - przykładowe rekomendacje i plany treningowe,
-- wyniki demonstratora końcowego w `outputs/`.
+- lokalne artefakty robocze w `outputs/`, które można odtwórzyć przez ponowne
+  uruchomienie odpowiednich skryptów.
 
 ## Ograniczenia
 
