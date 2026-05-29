@@ -69,7 +69,8 @@ training-ai-project/
 |   |-- models.py
 |   `-- session.py
 |-- scripts/
-|   `-- 01_eda.py
+|   |-- 01_eda.py
+|   `-- 02_modeling_and_recommendation.py
 |-- notebooks/
 |-- outputs/
 |   |-- eda_outputs/
@@ -87,7 +88,7 @@ Opis katalogów:
 
 - `generator/` - moduł generowania syntetycznych danych treningowych.
 - `data/` - kanoniczny zbiór danych projektu: `FINAL_ENGINE_V4.csv`.
-- `scripts/` - uruchamialne skrypty analityczne; aktualnie dostępny jest `01_eda.py`.
+- `scripts/` - uruchamialne skrypty analityczne: `01_eda.py` oraz `02_modeling_and_recommendation.py`.
 - `notebooks/` - planowane notebooki dla kolejnych etapów analizy i demonstracji.
 - `src/` - planowane moduły pomocnicze do przetwarzania danych, inżynierii cech, trenowania modeli, rekomendacji i reguł bezpieczeństwa.
 - `models/` - planowany katalog na zapisane modele predykcyjne, np. `best_weight_prediction_model.joblib`.
@@ -102,8 +103,8 @@ Planowane notebooki:
 - `notebooks/02_modeling_and_recommendation.ipynb` - model ML i system rekomendacyjny.
 - `notebooks/03_system_demo.ipynb` - demonstrator końcowy systemu.
 
-Obecnie w repozytorium znajduje się `scripts/01_eda.py`, czyli skryptowa wersja
-pierwszego etapu EDA.
+Obecnie w repozytorium znajdują się skrypty dla Etapu 1 EDA oraz Etapu 2
+modelowania ML i rekomendacji treningowych.
 
 ## Generator danych
 
@@ -220,6 +221,12 @@ Projekt generuje lub docelowo będzie generował:
 - przykładowe rekomendacje i plany treningowe,
 - lokalne artefakty robocze w `outputs/`, które można odtwórzyć przez ponowne
   uruchomienie odpowiednich skryptów.
+
+Etap 2 jest dostępny w `scripts/02_modeling_and_recommendation.py`. Skrypt
+zapisuje robocze wyniki do `outputs/stage2_outputs/`, a finalny model generuje
+lokalnie jako `models/best_weight_prediction_model.joblib`. Plik `.joblib` nie
+jest commitowany zwykłym Gitem ze względu na rozmiar; w przyszłości może zostać
+udostępniony przez GitHub Release albo Git LFS.
 
 ## Ograniczenia
 

@@ -1,15 +1,14 @@
-"""Etap 2 projektu: modelowanie ML i prototyp rekomendacji treningowych.
+"""Stage 2 of the project: ML modeling and training recommendations.
 
-Skrypt buduje komponent ML/AI po Etapie 1 EDA. Wejściem jest kanoniczny zbiór
-danych `data/FINAL_ENGINE_V4.csv`, a wyniki robocze są zapisywane do
-`outputs/stage2_outputs`. Finalny model predykcji ciężaru jest zapisywany jako
-`models/best_weight_prediction_model.joblib`.
+This script builds the ML/AI layer after the exploratory analysis from Stage 1.
+It reads the canonical dataset from `data/FINAL_ENGINE_V4.csv`, writes working
+outputs to `outputs/stage2_outputs`, and stores the final weight prediction
+model in `models/best_weight_prediction_model.joblib`.
 
-Ten etap obejmuje przygotowanie cech historycznych, trenowanie i porównanie
-modeli regresyjnych, wybór najlepszego modelu, ewaluację per grupa, prostą
-interpretację oraz prototyp hybrydowego rekomendera. Rekomender jest prototypem
-wspierającym decyzję treningową, a nie narzędziem medycznym, fizjoterapeutycznym
-ani produkcyjnym systemem trenerskim.
+The workflow prepares historical features, compares regression models, evaluates
+the best model across groups, adds a lightweight interpretation step, and builds
+a prototype hybrid recommender. The recommender supports training decisions; it
+is not a medical tool or a production coaching system.
 """
 
 import os
@@ -36,7 +35,7 @@ sns.set_theme(style="whitegrid")
 
 
 # ============================================================
-# 1. Konfiguracja Etapu 2
+# 1. Stage 2 configuration
 # ============================================================
 
 DATA_PATH = "data/FINAL_ENGINE_V4.csv"
@@ -50,20 +49,20 @@ RANDOM_STATE = 42
 MAX_TRAIN_SAMPLE = 250_000
 MAX_TEST_SAMPLE = 100_000
 
-# Domyślny tryb Etapu 2 zakłada trenowanie modeli. Tryb False służy tylko do
-# ponownego użycia wcześniej zapisanego modelu i wymaga istniejącego pliku joblib.
+# Default mode trains the models. Set this to False only when a saved joblib
+# model already exists and should be reused.
 RUN_MODEL_TRAINING = True
 
 
 def print_section(title):
-    """Wypisuje czytelny separator kolejnej części skryptu."""
+    """Print a readable separator for the next script section."""
     print("\n" + "#" * 110)
     print(title)
     print("#" * 110)
 
 
 def display_table(obj, title=None):
-    """Pokazuje tabelę w notebooku, a w konsoli wypisuje ją tekstowo."""
+    """Show a table in a notebook, or print it in the console."""
     if title:
         print("\n" + "=" * 110)
         print(title)
@@ -75,7 +74,7 @@ def display_table(obj, title=None):
 
 
 def save_plot(filename):
-    """Zapisuje aktualny wykres do katalogu wynikowego Etapu 2."""
+    """Save the current plot in the Stage 2 output directory."""
     path = os.path.join(OUTPUT_DIR, filename)
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches="tight")
@@ -83,7 +82,7 @@ def save_plot(filename):
 
 
 def make_one_hot_encoder():
-    """Tworzy OneHotEncoder zgodny ze starszymi i nowszymi wersjami sklearn."""
+    """Create a OneHotEncoder compatible with older and newer sklearn versions."""
     try:
         return OneHotEncoder(handle_unknown="ignore", sparse_output=False)
     except TypeError:
@@ -91,14 +90,14 @@ def make_one_hot_encoder():
 
 
 def round_to_nearest(value, step=2.5):
-    """Zaokrągla ciężar do najbliższego praktycznego kroku, np. 2.5 kg."""
+    """Round a weight to the nearest practical step, for example 2.5 kg."""
     if pd.isna(value):
         return np.nan
     return round(float(value) / step) * step
 
 
 def safe_median(series, default_value=0):
-    """Zwraca medianę serii albo wartość domyślną dla pustych danych."""
+    """Return the median, or a default value when the series is empty."""
     series = pd.Series(series).dropna()
     if len(series) == 0:
         return default_value
@@ -106,7 +105,7 @@ def safe_median(series, default_value=0):
 
 
 def safe_mode(series, default_value=None):
-    """Zwraca najczęstszą wartość serii albo wartość domyślną."""
+    """Return the most common value, or a default value when needed."""
     series = pd.Series(series).dropna()
     if len(series) == 0:
         return default_value
@@ -114,16 +113,16 @@ def safe_mode(series, default_value=None):
 
 
 # ============================================================
-# 2. Wczytanie i walidacja danych
+# 2. Data loading and validation
 # ============================================================
 
-print_section("WCZYTANIE I WALIDACJA DANYCH")
+print_section("DATA LOADING AND VALIDATION")
 
 df = pd.read_csv(DATA_PATH)
 
-print(f"Liczba rekordów: {len(df):,}")
-print(f"Liczba kolumn: {df.shape[1]:,}")
-display_table(df.head(), "Pierwsze rekordy")
+print(f"Rows: {len(df):,}")
+print(f"Columns: {df.shape[1]:,}")
+display_table(df.head(), "First rows")
 
 required_columns = [
     "user_id", "session_id", "date",
@@ -133,37 +132,38 @@ required_columns = [
 
 missing_columns = [col for col in required_columns if col not in df.columns]
 if missing_columns:
-    raise ValueError(f"Brakuje wymaganych kolumn: {missing_columns}")
+    raise ValueError(f"Missing required columns: {missing_columns}")
 
 df["date"] = pd.to_datetime(df["date"], errors="coerce")
 if df["date"].isna().sum() > 0:
-    print("UWAGA: Występują niepoprawne daty po konwersji.")
+    print("WARNING: Some dates could not be parsed.")
 
-print("Zakres dat:")
-print("Od:", df["date"].min())
-print("Do:", df["date"].max())
+print("Date range:")
+print("From:", df["date"].min())
+print("To:", df["date"].max())
 
 missing_table = df.isna().sum().to_frame("missing_count")
-display_table(missing_table, "Braki danych")
-print("\nLiczba duplikatów:", df.duplicated().sum())
+display_table(missing_table, "Missing values")
+print("\nDuplicate rows:", df.duplicated().sum())
 
 if "age" not in df.columns:
-    print("\nUWAGA:")
-    print("W danych nie ma kolumny age.")
+    print("\nWARNING:")
+    print("The dataset does not contain an age column.")
     print(
-        "Wiek będzie używany tylko w regułach bezpieczeństwa jako dane profilu "
-        "użytkownika, a nie jako cecha trenowana przez model."
+        "Age is used only as an external safety-rule input from the user profile, "
+        "not as a trained model feature."
     )
 
 
 # ============================================================
-# 3. Feature engineering pod model ML
+# 3. Feature engineering for ML
 # ============================================================
 
-print_section("FEATURE ENGINEERING POD MODEL ML")
+print_section("FEATURE ENGINEERING FOR ML")
 
-# volume opisuje prostą objętość serii i jest później używany w cechach historii.
+# Volume is a simple set-level workload measure used later in history features.
 df["volume"] = df["reps"] * df["weight"]
+# Epley e1RM gives a rough strength estimate for quick inspection.
 df["e1rm_epley"] = df["weight"] * (1 + df["reps"] / 30)
 
 df = (
@@ -172,8 +172,7 @@ df = (
     .reset_index(drop=True)
 )
 
-# Cechy historyczne pozwalają modelowi korzystać z poprzednich zachowań użytkownika
-# dla danego ćwiczenia, zamiast uczyć się tylko z bieżącego rekordu.
+# Historical features describe what the user recently did for the same exercise.
 df["prev_weight"] = df.groupby(["user_id", "exercise"])["weight"].shift(1)
 df["prev_reps"] = df.groupby(["user_id", "exercise"])["reps"].shift(1)
 df["prev_rir"] = df.groupby(["user_id", "exercise"])["rir"].shift(1)
@@ -181,8 +180,7 @@ df["prev_fatigue"] = df.groupby(["user_id", "exercise"])["fatigue"].shift(1)
 df["prev_volume"] = df.groupby(["user_id", "exercise"])["volume"].shift(1)
 
 for col in ["weight", "reps", "rir", "fatigue", "volume"]:
-    # shift(1) przed rolling averages ogranicza data leakage: średnia krocząca
-    # nie zawiera serii, dla której aktualnie przewidujemy ciężar.
+    # shift(1) keeps the current set out of the rolling average.
     df[f"rolling_{col}_3"] = (
         df
         .groupby(["user_id", "exercise"])[col]
@@ -196,19 +194,18 @@ display_table(
             "prev_weight", "rolling_weight_3", "volume", "e1rm_epley",
         ]
     ].head(15),
-    "Przykład cech historycznych",
+    "Example historical features",
 )
 
 
 # ============================================================
-# 4. Przygotowanie zbioru modelowego
+# 4. Model dataset preparation
 # ============================================================
 
-print_section("PRZYGOTOWANIE ZBIORU MODELOWEGO")
+print_section("MODEL DATASET PREPARATION")
 
-# reps, rir i fatigue traktujemy tutaj jako planowane parametry serii, a nie jako
-# znane przyszłe wyniki. Model odpowiada na pytanie: jaki ciężar dobrać dla
-# zaplanowanej liczby powtórzeń i docelowej trudności.
+# reps, rir, and fatigue are treated as planned set parameters. The model answers:
+# which weight fits the planned reps and target difficulty?
 FEATURES = [
     "exercise", "level", "split", "phase", "sex",
     "set_number", "reps", "fatigue", "rir",
@@ -223,8 +220,8 @@ numeric_features = [col for col in FEATURES if col not in categorical_features]
 
 model_ready = df.dropna(subset=FEATURES + [TARGET]).copy()
 
-print(f"Liczba rekordów gotowych do modelowania: {len(model_ready):,}")
-display_table(model_ready[FEATURES + [TARGET]].head(), "Dane modelowe")
+print(f"Model-ready rows: {len(model_ready):,}")
+display_table(model_ready[FEATURES + [TARGET]].head(), "Model dataset")
 
 model_ready.to_csv(
     os.path.join(OUTPUT_DIR, "model_ready_stage2.csv"),
@@ -233,25 +230,24 @@ model_ready.to_csv(
 
 
 # ============================================================
-# 5. Podział czasowy train/test
+# 5. Time-based train/test split
 # ============================================================
 
-print_section("PODZIAŁ CZASOWY TRAIN/TEST")
+print_section("TIME-BASED TRAIN/TEST SPLIT")
 
-# Podział czasowy lepiej przypomina realne użycie systemu: model uczy się na
-# wcześniejszych treningach i przewiduje późniejsze rekordy.
+# Time-based split is closer to real use: train on earlier workouts, predict later ones.
 cutoff_date = model_ready["date"].quantile(0.8)
 train_df = model_ready[model_ready["date"] <= cutoff_date].copy()
 test_df = model_ready[model_ready["date"] > cutoff_date].copy()
 
-print("Data odcięcia:", cutoff_date)
+print("Cutoff date:", cutoff_date)
 print(f"Train: {len(train_df):,}")
 print(f"Test: {len(test_df):,}")
 
 if len(train_df) == 0 or len(test_df) == 0:
     raise ValueError(
-        "Po podziale czasowym train/test jedna z części jest pusta. "
-        "Sprawdź zakres dat w danych."
+        "After the time-based train/test split, one split is empty. "
+        "Check the date range in the dataset."
     )
 
 train_df_sample = train_df.sample(
@@ -263,8 +259,9 @@ test_df_sample = test_df.sample(
     random_state=RANDOM_STATE,
 )
 
-print(f"Train po próbkowaniu: {len(train_df_sample):,}")
-print(f"Test po próbkowaniu: {len(test_df_sample):,}")
+# Sampling keeps the comparison fast on larger synthetic datasets.
+print(f"Train after sampling: {len(train_df_sample):,}")
+print(f"Test after sampling: {len(test_df_sample):,}")
 
 X_train = train_df_sample[FEATURES]
 y_train = train_df_sample[TARGET]
@@ -273,14 +270,14 @@ y_test = test_df_sample[TARGET]
 
 
 # ============================================================
-# 6. Pipeline preprocessingowy
+# 6. Preprocessing pipeline
 # ============================================================
 
-print_section("PIPELINE PREPROCESSINGOWY")
+print_section("PREPROCESSING PIPELINE")
 
 
 def build_preprocessor(scale_numeric=False):
-    """Buduje preprocessing dla cech kategorycznych i numerycznych."""
+    """Build preprocessing for categorical and numeric features."""
     numeric_transformer = StandardScaler() if scale_numeric else "passthrough"
     return ColumnTransformer(
         transformers=[
@@ -291,14 +288,12 @@ def build_preprocessor(scale_numeric=False):
 
 
 # ============================================================
-# 7. Definicja modeli
+# 7. Model definitions
 # ============================================================
 
-print_section("DEFINICJA MODELI")
+print_section("MODEL DEFINITIONS")
 
-# Porównujemy prosty model liniowy, model baggingowy i boostingowy. Daje to
-# sensowny przekrój: interpretowalny baseline ML, stabilny model drzewiasty i
-# mocniejszy model gradientowy.
+# Compare a linear model, bagging model, and gradient boosting model.
 models = {
     "ridge_regression": Pipeline(
         steps=[
@@ -338,26 +333,26 @@ models = {
     ),
 }
 
-print("Modele do porównania:")
+print("Models to compare:")
 for name in models.keys():
     print("-", name)
 
 
 # ============================================================
-# 8. Metryki i funkcje ewaluacyjne
+# 8. Metrics and evaluation helpers
 # ============================================================
 
-print_section("METRYKI I FUNKCJE EWALUACYJNE")
+print_section("METRICS AND EVALUATION HELPERS")
 
 
 def calculate_regression_metrics(model_name, y_true, y_pred):
-    """Liczy główne metryki regresji dla predykcji ciężaru."""
+    """Calculate regression metrics for weight prediction."""
     y_pred = np.maximum(np.asarray(y_pred), 0)
     y_true = np.asarray(y_true)
     abs_error = np.abs(y_true - y_pred)
 
-    # MAE jest główną metryką, bo jest łatwa do interpretacji w kilogramach.
-    # Progi within_* pokazują praktyczną użyteczność predykcji dla treningu.
+    # MAE is the main metric because it is easy to read in kilograms.
+    # The within_* thresholds show practical prediction quality.
     return {
         "model": model_name,
         "MAE": mean_absolute_error(y_true, y_pred),
@@ -370,7 +365,7 @@ def calculate_regression_metrics(model_name, y_true, y_pred):
 
 
 def evaluate_regression_model(model_name, model, X_test, y_test):
-    """Uruchamia predykcję modelu i zwraca metryki oraz tabelę predykcji."""
+    """Run model predictions and return metrics with prediction rows."""
     y_pred = model.predict(X_test)
     y_pred = np.maximum(y_pred, 0)
     results = calculate_regression_metrics(model_name, y_test, y_pred)
@@ -385,7 +380,7 @@ def evaluate_regression_model(model_name, model, X_test, y_test):
 
 
 def evaluate_naive_baseline(test_data):
-    """Ewaluuje baseline, który jako predykcję przyjmuje poprzedni ciężar."""
+    """Evaluate the baseline that reuses the previous weight as prediction."""
     y_true = test_data[TARGET].values
     y_pred = test_data["prev_weight"].values
     y_pred = np.maximum(y_pred, 0)
@@ -401,25 +396,24 @@ def evaluate_naive_baseline(test_data):
 
 
 # ============================================================
-# 9. Trenowanie i porównanie modeli
+# 9. Model training and comparison
 # ============================================================
 
-print_section("TRENOWANIE I PORÓWNANIE MODELI")
+print_section("MODEL TRAINING AND COMPARISON")
 
 all_results = []
 all_predictions = {}
 trained_models = {}
 
-# Naiwny baseline prev_weight jest prostym punktem odniesienia: dobry model ML
-# powinien uzasadnić swoją złożoność poprawą względem poprzedniego ciężaru.
+# prev_weight is a simple reference point for checking whether ML adds value.
 naive_results, naive_predictions = evaluate_naive_baseline(test_df_sample)
 all_results.append(naive_results)
 all_predictions["naive_prev_weight"] = naive_predictions
-print("Baseline naiwny:", naive_results)
+print("Naive baseline:", naive_results)
 
 if RUN_MODEL_TRAINING:
     for model_name, pipeline in models.items():
-        print(f"\nTrenowanie modelu: {model_name}")
+        print(f"\nTraining model: {model_name}")
         model = clone(pipeline)
         model.fit(X_train, y_train)
 
@@ -435,25 +429,24 @@ if RUN_MODEL_TRAINING:
         print(results)
 
     results_df = pd.DataFrame(all_results).sort_values("MAE")
-    display_table(results_df, "Porównanie modeli regresyjnych z baseline naiwnym")
+    display_table(results_df, "Regression model comparison with naive baseline")
     results_df.to_csv(
         os.path.join(OUTPUT_DIR, "model_comparison_results.csv"),
         index=False,
     )
 
-    # Najlepszy model wybieramy tylko spośród modeli ML, ale porównujemy go także
-    # z naiwnym baseline'em prev_weight.
+    # The best model is selected only from ML models, then compared with prev_weight.
     ml_results_df = results_df[results_df["model"] != "naive_prev_weight"].copy()
     best_model_name = ml_results_df.iloc[0]["model"]
     best_pipeline = trained_models[best_model_name]
 
-    print("\nNajlepszy model ML według MAE:", best_model_name)
+    print("\nBest ML model by MAE:", best_model_name)
     joblib.dump(best_pipeline, MODEL_FILENAME)
-    print("Model zapisano do:", MODEL_FILENAME)
+    print("Model saved to:", MODEL_FILENAME)
 
     plt.figure(figsize=(10, 5))
     sns.barplot(data=results_df, x="model", y="MAE")
-    plt.title("Porównanie modeli - MAE")
+    plt.title("Model comparison - MAE")
     plt.xlabel("Model")
     plt.ylabel("MAE")
     plt.xticks(rotation=25)
@@ -461,19 +454,19 @@ if RUN_MODEL_TRAINING:
 
     plt.figure(figsize=(10, 5))
     sns.barplot(data=results_df, x="model", y="within_5kg_percent")
-    plt.title("Odsetek predykcji z błędem do 5 kg")
+    plt.title("Predictions within 5 kg error")
     plt.xlabel("Model")
-    plt.ylabel("% predykcji w granicy 5 kg")
+    plt.ylabel("% predictions within 5 kg")
     plt.xticks(rotation=25)
     save_plot("model_comparison_within_5kg.png")
 else:
     if not os.path.exists(MODEL_FILENAME):
         raise FileNotFoundError(
-            f"RUN_MODEL_TRAINING=False wymaga istniejącego modelu: {MODEL_FILENAME}"
+            f"RUN_MODEL_TRAINING=False requires an existing model: {MODEL_FILENAME}"
         )
     best_pipeline = joblib.load(MODEL_FILENAME)
     best_model_name = "loaded_model"
-    print("Wczytano zapisany model:", MODEL_FILENAME)
+    print("Loaded saved model:", MODEL_FILENAME)
 
     loaded_results, loaded_predictions = evaluate_regression_model(
         model_name=best_model_name,
@@ -487,14 +480,14 @@ else:
 
 
 # ============================================================
-# 10. Analiza najlepszego modelu
+# 10. Best model analysis
 # ============================================================
 
-print_section("ANALIZA NAJLEPSZEGO MODELU")
+print_section("BEST MODEL ANALYSIS")
 
 best_predictions = all_predictions[best_model_name].copy()
 
-display_table(best_predictions.head(20), "Przykładowe predykcje najlepszego modelu")
+display_table(best_predictions.head(20), "Sample predictions from the best model")
 best_predictions.to_csv(
     os.path.join(OUTPUT_DIR, "best_model_predictions.csv"),
     index=False,
@@ -512,24 +505,24 @@ sns.scatterplot(
     y="predicted_weight",
     alpha=0.25,
 )
-plt.title(f"Rzeczywisty ciężar vs predykcja - {best_model_name}")
-plt.xlabel("Rzeczywisty ciężar")
-plt.ylabel("Przewidywany ciężar")
+plt.title(f"Actual weight vs prediction - {best_model_name}")
+plt.xlabel("Actual weight")
+plt.ylabel("Predicted weight")
 save_plot("best_model_actual_vs_predicted.png")
 
 plt.figure(figsize=(9, 5))
 sns.histplot(best_predictions["absolute_error"], bins=60, kde=True)
-plt.title(f"Rozkład błędów bezwzględnych - {best_model_name}")
-plt.xlabel("Błąd bezwzględny")
-plt.ylabel("Liczba obserwacji")
+plt.title(f"Absolute error distribution - {best_model_name}")
+plt.xlabel("Absolute error")
+plt.ylabel("Number of observations")
 save_plot("best_model_absolute_error_distribution.png")
 
 
 # ============================================================
-# 11. Ewaluacja per grupa
+# 11. Group-level evaluation
 # ============================================================
 
-print_section("EWALUACJA PER GRUPA")
+print_section("GROUP-LEVEL EVALUATION")
 
 test_eval_df = test_df_sample.copy().reset_index(drop=True)
 test_eval_df["predicted_weight"] = best_pipeline.predict(test_eval_df[FEATURES])
@@ -540,7 +533,7 @@ test_eval_df["absolute_error"] = (
 
 
 def group_evaluation(data, group_col, min_records=100):
-    """Liczy metryki modelu osobno dla wybranej grupy danych."""
+    """Calculate model metrics separately for one grouping column."""
     rows = []
     for group_value, group_df in data.groupby(group_col):
         if len(group_df) < min_records:
@@ -556,8 +549,7 @@ def group_evaluation(data, group_col, min_records=100):
     return pd.DataFrame(rows).sort_values("MAE") if rows else pd.DataFrame()
 
 
-# Ewaluacja per grupa pokazuje, czy model działa podobnie dla różnych poziomów,
-# faz, płci i ćwiczeń, a nie tylko dobrze wygląda w średniej globalnej.
+# Group-level metrics show whether the model is consistent across key segments.
 for group_col in ["level", "phase", "sex", "exercise"]:
     group_results = group_evaluation(
         test_eval_df,
@@ -565,7 +557,7 @@ for group_col in ["level", "phase", "sex", "exercise"]:
         min_records=100,
     )
     if len(group_results) > 0:
-        display_table(group_results.head(30), f"Wyniki modelu według grupy: {group_col}")
+        display_table(group_results.head(30), f"Model results by group: {group_col}")
         group_results.to_csv(
             os.path.join(OUTPUT_DIR, f"group_evaluation_by_{group_col}.csv"),
             index=False,
@@ -573,14 +565,14 @@ for group_col in ["level", "phase", "sex", "exercise"]:
 
 
 # ============================================================
-# 12. Interpretacja modelu
+# 12. Model interpretation
 # ============================================================
 
-print_section("INTERPRETACJA MODELU")
+print_section("MODEL INTERPRETATION")
 
 
 def get_feature_names_from_preprocessor(preprocessor):
-    """Odtwarza nazwy cech po transformacji OneHotEncoder i passthrough."""
+    """Recover feature names after one-hot encoding and passthrough columns."""
     feature_names = []
     cat_transformer = preprocessor.named_transformers_["cat"]
     cat_names = cat_transformer.get_feature_names_out(categorical_features)
@@ -601,7 +593,7 @@ try:
             )
             .sort_values("importance", ascending=False)
         )
-        display_table(importance_df.head(25), "Najważniejsze cechy modelu")
+        display_table(importance_df.head(25), "Most important model features")
         importance_df.to_csv(
             os.path.join(OUTPUT_DIR, "feature_importance.csv"),
             index=False,
@@ -609,35 +601,34 @@ try:
 
         plt.figure(figsize=(10, 7))
         sns.barplot(data=importance_df.head(20), x="importance", y="feature")
-        plt.title("Top 20 cech według ważności")
-        plt.xlabel("Ważność")
-        plt.ylabel("Cecha")
+        plt.title("Top 20 features by importance")
+        plt.xlabel("Importance")
+        plt.ylabel("Feature")
         save_plot("feature_importance_top20.png")
 
     elif hasattr(model, "coef_"):
         coef_df = pd.DataFrame({"feature": feature_names, "coefficient": model.coef_})
         coef_df["abs_coefficient"] = coef_df["coefficient"].abs()
         coef_df = coef_df.sort_values("abs_coefficient", ascending=False)
-        display_table(coef_df.head(25), "Najważniejsze współczynniki modelu")
+        display_table(coef_df.head(25), "Largest model coefficients")
         coef_df.to_csv(
             os.path.join(OUTPUT_DIR, "model_coefficients.csv"),
             index=False,
         )
     else:
-        print("Wybrany model nie udostępnia prostych ważności cech.")
+        print("The selected model does not expose simple feature importance.")
 except Exception as e:
-    print("Nie udało się wyliczyć interpretacji modelu.")
-    print("Powód:", e)
+    print("Could not calculate model interpretation.")
+    print("Reason:", e)
 
 
 # ============================================================
-# 13. Moduł rekomendacyjny
+# 13. Recommendation module
 # ============================================================
 
-print_section("MODUŁ REKOMENDACYJNY")
+print_section("RECOMMENDATION MODULE")
 
-# Rekomender nie bazuje wyłącznie na ML. Łączy podobnych użytkowników, statystyki
-# historyczne, predykcję ciężaru i reguły bezpieczeństwa.
+# The recommender combines ML output with similar users and safety rules.
 exercise_category_map = {
     "Bench Press": "push",
     "Incline Bench Press": "push",
@@ -659,7 +650,7 @@ df["exercise_category"] = df["exercise"].map(exercise_category_map).fillna("othe
 
 
 def filter_similar_users(data, sex=None, level=None, phase=None, split=None):
-    """Znajduje możliwie podobne rekordy, stopniowo luzując kryteria."""
+    """Find similar records, relaxing filters when needed."""
     filter_sets = [
         {"sex": sex, "level": level, "phase": phase, "split": split},
         {"level": level, "phase": phase, "split": split},
@@ -679,7 +670,7 @@ def filter_similar_users(data, sex=None, level=None, phase=None, split=None):
 
 
 def choose_recommended_split(data, sex, level, phase, days_per_week):
-    """Dobiera split z uwzględnieniem liczby dni treningowych i podobnych rekordów."""
+    """Choose a split based on training days and similar records."""
     similar, filters_used = filter_similar_users(
         data=data,
         sex=sex,
@@ -701,8 +692,8 @@ def choose_recommended_split(data, sex, level, phase, days_per_week):
     if preferred_split in available_splits:
         recommended_split = preferred_split
         reason = (
-            f"Wybrano split {preferred_split}, ponieważ pasuje do liczby dni "
-            f"treningowych: {days_per_week}."
+            f"Selected split {preferred_split} because it fits the planned "
+            f"training days per week: {days_per_week}."
         )
     else:
         recommended_split = safe_mode(
@@ -710,14 +701,14 @@ def choose_recommended_split(data, sex, level, phase, days_per_week):
             default_value=data["split"].mode().iloc[0],
         )
         reason = (
-            "Wybrano najczęstszy split wśród podobnych użytkowników: "
+            "Selected the most common split among similar users: "
             f"{recommended_split}."
         )
     return recommended_split, reason, filters_used
 
 
 def select_exercises_for_plan(data, split, max_exercises=6):
-    """Wybiera ćwiczenia do planu na podstawie splitu i popularności w danych."""
+    """Select exercises for the plan using split logic and dataset popularity."""
     selected = []
 
     def top_exercises(category, n):
@@ -749,7 +740,7 @@ def select_exercises_for_plan(data, split, max_exercises=6):
 
 
 def get_exercise_training_parameters(data, exercise, phase):
-    """Wyznacza bazowe serie, powtórzenia, RIR i fatigue dla ćwiczenia."""
+    """Set baseline sets, reps, RIR, and fatigue for one exercise."""
     ex_data = data[data["exercise"] == exercise].copy()
     if len(ex_data) == 0:
         return {"sets": 3, "reps": 8, "target_rir": 2, "target_fatigue": 6}
@@ -780,7 +771,7 @@ def get_exercise_training_parameters(data, exercise, phase):
 
 
 def get_history_features_for_user_exercise(data, user_id, exercise, fallback_data):
-    """Pobiera historię użytkownika dla ćwiczenia albo sensowny fallback z grupy."""
+    """Use user exercise history, or fall back to similar records."""
     if user_id is not None and user_id in data["user_id"].unique():
         hist = (
             data[(data["user_id"] == user_id) & (data["exercise"] == exercise)]
@@ -832,14 +823,14 @@ def get_history_features_for_user_exercise(data, user_id, exercise, fallback_dat
 
 
 # ============================================================
-# 14. Reguły bezpieczeństwa
+# 14. Safety rules
 # ============================================================
 
-print_section("REGUŁY BEZPIECZEŃSTWA")
+print_section("SAFETY RULES")
 
 
 def apply_safety_rules(predicted_weight, prev_weight, recent_rir, recent_fatigue, phase, level, age=None):
-    """Ogranicza rekomendowany ciężar do bezpiecznego zakresu progresji."""
+    """Limit recommended weight to a practical progression range."""
     predicted_weight = max(float(predicted_weight), 0)
 
     if pd.isna(prev_weight) or prev_weight <= 0:
@@ -852,8 +843,7 @@ def apply_safety_rules(predicted_weight, prev_weight, recent_rir, recent_fatigue
     else:
         max_increase = 0.05
 
-    # Wiek nie jest cechą modelu, bo nie występuje w historii treningowej.
-    # Może natomiast działać jako zewnętrzna reguła bezpieczeństwa z profilu.
+    # Age is not in training history, so it is used only as an external safety rule.
     if age is not None:
         if age >= 60:
             max_increase = min(max_increase, 0.02)
@@ -864,8 +854,7 @@ def apply_safety_rules(predicted_weight, prev_weight, recent_rir, recent_fatigue
         safe_weight = min(predicted_weight, prev_weight * 0.85)
         return round_to_nearest(safe_weight, step=2.5)
 
-    # Reguły bezpieczeństwa ograniczają ciężar, gdy ostatnie serie były bardzo
-    # trudne albo użytkownik ma wysokie zmęczenie.
+    # Hard recent sets or high fatigue should block aggressive jumps.
     if recent_fatigue >= 8 or recent_rir <= 1:
         safe_weight = min(predicted_weight, prev_weight)
     else:
@@ -878,7 +867,7 @@ def apply_safety_rules(predicted_weight, prev_weight, recent_rir, recent_fatigue
 
 
 def assign_training_day(split, exercise_category):
-    """Przypisuje ćwiczenie do dnia treningowego zgodnie ze splitem."""
+    """Assign an exercise to a training day based on the selected split."""
     if split == "ppl":
         if exercise_category == "push":
             return "Push"
@@ -899,7 +888,7 @@ def assign_training_day(split, exercise_category):
 
 
 def generate_training_plan(profile, model, data, user_id=None, max_exercises=6):
-    """Generuje przykładowy plan z predykcją ciężaru i korektą bezpieczeństwa."""
+    """Generate a sample plan with predicted and safety-adjusted weights."""
     age = profile.get("age", None)
     sex = profile.get("sex", safe_mode(data["sex"]))
     level = profile.get("level", safe_mode(data["level"]))
@@ -990,8 +979,8 @@ def generate_training_plan(profile, model, data, user_id=None, max_exercises=6):
                 "final_recommended_weight": final_weight,
                 "history_available": history_features["history_available"],
                 "recommendation_reason": (
-                    "Ciężar wyznaczony przez model regresyjny i skorygowany "
-                    "regułami bezpieczeństwa."
+                    "Weight predicted by the regression model and adjusted "
+                    "with safety rules."
                 ),
             }
         )
@@ -1009,10 +998,10 @@ def generate_training_plan(profile, model, data, user_id=None, max_exercises=6):
 
 
 # ============================================================
-# 15. Generowanie przykładowych planów
+# 15. Sample plan generation
 # ============================================================
 
-print_section("GENEROWANIE PRZYKŁADOWYCH PLANÓW")
+print_section("SAMPLE PLAN GENERATION")
 
 available_sexes = df["sex"].dropna().unique().tolist()
 female_value = "female" if "female" in available_sexes else df["sex"].mode().iloc[0]
@@ -1065,7 +1054,7 @@ for profile in example_profiles:
         max_exercises=6,
     )
     generated_plans[profile_name] = {"plan": plan_df, "metadata": metadata}
-    display_table(plan_df, f"Plan treningowy: {profile_name}")
+    display_table(plan_df, f"Training plan: {profile_name}")
     plan_df.to_csv(
         os.path.join(OUTPUT_DIR, f"recommended_plan_{profile_name}.csv"),
         index=False,
@@ -1074,7 +1063,7 @@ for profile in example_profiles:
     print(metadata)
 
 
-print_section("REKOMENDACJA DLA ISTNIEJĄCEGO UŻYTKOWNIKA")
+print_section("RECOMMENDATION FOR AN EXISTING USER")
 
 example_existing_user = df["user_id"].value_counts().index[0]
 user_profile_from_data = {
@@ -1096,7 +1085,7 @@ existing_user_plan, existing_user_metadata = generate_training_plan(
 
 display_table(
     existing_user_plan,
-    f"Plan dla istniejącego użytkownika: {example_existing_user}",
+    f"Plan for existing user: {example_existing_user}",
 )
 existing_user_plan.to_csv(
     os.path.join(OUTPUT_DIR, "recommended_plan_existing_user.csv"),
@@ -1107,10 +1096,10 @@ print(existing_user_metadata)
 
 
 # ============================================================
-# 16. Podsumowanie Etapu 2
+# 16. Stage 2 summary
 # ============================================================
 
-print_section("PODSUMOWANIE ETAPU 2")
+print_section("STAGE 2 SUMMARY")
 
 best_ml_row = results_df[results_df["model"] == best_model_name].iloc[0]
 naive_row = results_df[results_df["model"] == "naive_prev_weight"].iloc[0]
@@ -1120,47 +1109,46 @@ mae_improvement_percent = (
 )
 
 summary_text = f"""
-ETAP 2 - PODSUMOWANIE
+STAGE 2 SUMMARY
 
-W tym etapie zbudowano właściwy komponent ML/AI systemu treningowego.
+This stage builds the main ML/AI component of the training system.
 
-Porównane modele:
+Compared models:
 - Ridge Regression,
 - Random Forest,
 - HistGradientBoosting,
-- baseline naiwny prev_weight jako punkt odniesienia.
+- naive prev_weight baseline as a reference point.
 
-Najlepszy model ML według MAE:
+Best ML model by MAE:
 - {best_model_name}
 
-Wyniki najlepszego modelu ML:
+Best ML model results:
 - MAE: {best_ml_row['MAE']:.4f}
 - RMSE: {best_ml_row['RMSE']:.4f}
 - R2: {best_ml_row['R2']:.4f}
-- Predykcje w granicy 2.5 kg: {best_ml_row['within_2_5kg_percent']:.2f}%
-- Predykcje w granicy 5 kg: {best_ml_row['within_5kg_percent']:.2f}%
-- Predykcje w granicy 10 kg: {best_ml_row['within_10kg_percent']:.2f}%
+- Predictions within 2.5 kg: {best_ml_row['within_2_5kg_percent']:.2f}%
+- Predictions within 5 kg: {best_ml_row['within_5kg_percent']:.2f}%
+- Predictions within 10 kg: {best_ml_row['within_10kg_percent']:.2f}%
 
-Porównanie z naiwnym baseline'em:
-- MAE baseline'u naiwnego: {naive_row['MAE']:.4f}
-- Poprawa MAE względem baseline'u: {mae_improvement:.4f}
-- Poprawa procentowa: {mae_improvement_percent:.2f}%
+Comparison with the naive baseline:
+- Naive baseline MAE: {naive_row['MAE']:.4f}
+- MAE improvement over baseline: {mae_improvement:.4f}
+- Percentage improvement: {mae_improvement_percent:.2f}%
 
-System rekomendacyjny:
-Rekomender nie bazuje wyłącznie na modelu ML. Łączy model predykcyjny, dane
-podobnych użytkowników oraz reguły bezpieczeństwa, dzięki czemu jest bardziej
-praktyczny niż sama regresja ciężaru.
+Recommendation system:
+The recommender does not rely only on the ML model. It combines weight
+prediction, similar-user data, and safety rules, which makes it more practical
+than pure weight regression.
 
-Ograniczenia:
-1. Wiek nie występuje w danych historycznych, dlatego jest używany wyłącznie jako
-   reguła bezpieczeństwa pochodząca z profilu użytkownika.
-2. Mapa kategorii ćwiczeń jest ręczną regułą ekspercką i w przyszłości może
-   zostać zastąpiona automatyczną klasyfikacją ćwiczeń.
-3. Cechy reps, rir i fatigue są używane jako planowane parametry serii. Model
-   odpowiada na pytanie: jaki ciężar dobrać dla zaplanowanej liczby powtórzeń i
-   docelowej trudności.
-4. System jest prototypem wspierającym decyzję. Nie jest narzędziem medycznym,
-   fizjoterapeutycznym ani produkcyjnym systemem trenerskim.
+Limitations:
+1. Age is not available in historical training data, so it is used only as an
+   external safety rule from the user profile.
+2. The exercise category map is a manual expert rule and can later be replaced
+   with automatic exercise classification.
+3. reps, rir, and fatigue are used as planned set parameters. The model answers:
+   which weight fits the planned reps and target difficulty?
+4. The system is a decision-support prototype. It is not a medical tool or a
+   production coaching system.
 """
 
 print(summary_text)
@@ -1168,4 +1156,4 @@ print(summary_text)
 with open(os.path.join(OUTPUT_DIR, "stage2_summary.txt"), "w", encoding="utf-8") as f:
     f.write(summary_text)
 
-print(f"\nWyniki zapisano w folderze: {OUTPUT_DIR}")
+print(f"\nOutputs saved in: {OUTPUT_DIR}")

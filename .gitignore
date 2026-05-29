@@ -2,3 +2,6 @@
 outputs/eda_outputs/
 outputs/stage2_outputs/
 outputs/stage3_outputs/
+
+# Large model artifacts generated locally.
+models/*.joblib
