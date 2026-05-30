@@ -249,6 +249,37 @@ def choose_recommended_split(days_per_week):
     return "ppl", "Selected PPL because the profile has 5 or more training days."
 
 
+def build_weekly_day_templates(split, days_per_week):
+    """Build the training days that make up a full weekly plan."""
+    if split == "ppl":
+        cycle = [
+            {"day_focus": "Push", "categories": ["push"], "target_exercises": 6},
+            {"day_focus": "Pull", "categories": ["pull"], "target_exercises": 6},
+            {"day_focus": "Legs", "categories": ["legs"], "target_exercises": 5},
+        ]
+    elif split == "upper_lower":
+        cycle = [
+            {"day_focus": "Upper", "categories": ["push", "pull"], "target_exercises": 6},
+            {"day_focus": "Lower", "categories": ["legs"], "target_exercises": 5},
+        ]
+    else:
+        cycle = [
+            {
+                "day_focus": "Full Body",
+                "categories": ["push", "pull", "legs"],
+                "target_exercises": 6,
+            }
+        ]
+
+    templates = []
+    for day_index in range(days_per_week):
+        template = cycle[day_index % len(cycle)].copy()
+        template["day_number"] = day_index + 1
+        template["day_name"] = f"Day {day_index + 1} - {template['day_focus']}"
+        templates.append(template)
+    return templates
+
+
 def filter_similar_users(data, profile, split):
     """Find similar training records, relaxing filters when needed."""
     filter_sets = [
@@ -279,34 +310,31 @@ def filter_similar_users(data, profile, split):
     return data.copy(), {}
 
 
-def select_exercises_for_plan(similar_data, fallback_data, split, max_exercises=6):
-    """Select exercises from similar users, falling back to the whole dataset."""
+def select_exercises_for_day(similar_data, fallback_data, categories, target_count, day_number):
+    """Select exercises for one training day from similar-user data."""
     source = similar_data if len(similar_data) > 0 else fallback_data
 
-    def top_exercises(data, category, count):
-        temp = data[data["exercise_category"] == category]
-        return temp["exercise"].value_counts().head(count).index.tolist()
+    def ranked_exercises(data):
+        temp = data[data["exercise_category"].isin(categories)]
+        return temp["exercise"].value_counts().index.tolist()
 
-    selected = []
-    if split == "upper_lower":
-        upper = source[source["exercise_category"].isin(["push", "pull"])]
-        lower = source[source["exercise_category"] == "legs"]
-        selected.extend(upper["exercise"].value_counts().head(3).index.tolist())
-        selected.extend(lower["exercise"].value_counts().head(3).index.tolist())
-    else:
-        selected.extend(top_exercises(source, "push", 2))
-        selected.extend(top_exercises(source, "pull", 2))
-        selected.extend(top_exercises(source, "legs", 2))
+    selected = ranked_exercises(source)
+    if len(selected) == 0:
+        selected = ranked_exercises(fallback_data)
 
     selected = list(dict.fromkeys(selected))
-    if len(selected) < max_exercises:
-        for exercise in fallback_data["exercise"].value_counts().index.tolist():
+    if len(selected) > 0:
+        offset = ((day_number - 1) * 2) % len(selected)
+        selected = selected[offset:] + selected[:offset]
+
+    if len(selected) < target_count:
+        for exercise in ranked_exercises(fallback_data):
             if exercise not in selected:
                 selected.append(exercise)
-            if len(selected) >= max_exercises:
+            if len(selected) >= target_count:
                 break
 
-    return selected[:max_exercises]
+    return selected[:target_count]
 
 
 def get_exercise_parameters(similar_data, fallback_data, exercise, phase):
@@ -447,100 +475,91 @@ def apply_safety_rules(predicted_weight, history, profile):
     return round_to_nearest(predicted_weight), "no_adjustment"
 
 
-def assign_training_day(split, exercise_category):
-    """Map an exercise category to a simple training day label."""
-    if split == "ppl":
-        if exercise_category == "push":
-            return "Push"
-        if exercise_category == "pull":
-            return "Pull"
-        if exercise_category == "legs":
-            return "Legs"
-        return "Accessory"
-
-    if split == "upper_lower":
-        if exercise_category in ["push", "pull"]:
-            return "Upper"
-        if exercise_category == "legs":
-            return "Lower"
-        return "Accessory"
-
-    return "Full Body"
-
-
-def generate_training_plan(profile, model, data, user_id=None, max_exercises=6):
-    """Generate a demo plan and return it with metadata."""
+def generate_training_plan(profile, model, data, user_id=None):
+    """Generate a full weekly demo plan and return it with metadata."""
     user_id = user_id if user_id is not None else profile.get("user_id")
     recommended_split, split_reason = choose_recommended_split(profile["days_per_week"])
     similar_data, filters_used = filter_similar_users(data, profile, recommended_split)
-    selected_exercises = select_exercises_for_plan(
-        similar_data=similar_data,
-        fallback_data=data,
+    weekly_templates = build_weekly_day_templates(
         split=recommended_split,
-        max_exercises=max_exercises,
+        days_per_week=profile["days_per_week"],
     )
 
     plan_rows = []
     history_used = False
 
-    for exercise in selected_exercises:
-        params = get_exercise_parameters(similar_data, data, exercise, profile["phase"])
-        history = get_history_features(data, user_id, exercise, similar_data, data)
-        history_used = history_used or history["history_available"]
+    for template in weekly_templates:
+        selected_exercises = select_exercises_for_day(
+            similar_data=similar_data,
+            fallback_data=data,
+            categories=template["categories"],
+            target_count=template["target_exercises"],
+            day_number=template["day_number"],
+        )
 
-        model_input = pd.DataFrame(
-            [
+        for exercise_order, exercise in enumerate(selected_exercises, start=1):
+            params = get_exercise_parameters(similar_data, data, exercise, profile["phase"])
+            history = get_history_features(data, user_id, exercise, similar_data, data)
+            history_used = history_used or history["history_available"]
+
+            model_input = pd.DataFrame(
+                [
+                    {
+                        "exercise": exercise,
+                        "level": profile["level"],
+                        "split": recommended_split,
+                        "phase": profile["phase"],
+                        "sex": profile["sex"],
+                        "set_number": 1,
+                        "reps": params["reps"],
+                        "fatigue": params["target_fatigue"],
+                        "rir": params["target_rir"],
+                        "prev_weight": history["prev_weight"],
+                        "prev_reps": history["prev_reps"],
+                        "prev_rir": history["prev_rir"],
+                        "prev_fatigue": history["prev_fatigue"],
+                        "prev_volume": history["prev_volume"],
+                        "rolling_weight_3": history["rolling_weight_3"],
+                        "rolling_reps_3": history["rolling_reps_3"],
+                        "rolling_rir_3": history["rolling_rir_3"],
+                        "rolling_fatigue_3": history["rolling_fatigue_3"],
+                        "rolling_volume_3": history["rolling_volume_3"],
+                    }
+                ]
+            )
+
+            predicted_weight = float(model.predict(model_input)[0])
+            final_weight, safety_adjustment = apply_safety_rules(
+                predicted_weight,
+                history,
+                profile,
+            )
+            exercise_category = EXERCISE_CATEGORY_MAP.get(exercise, "other")
+
+            plan_rows.append(
                 {
-                    "exercise": exercise,
-                    "level": profile["level"],
+                    "day_number": template["day_number"],
+                    "day_name": template["day_name"],
+                    "day_focus": template["day_focus"],
+                    "exercise_order": exercise_order,
                     "split": recommended_split,
-                    "phase": profile["phase"],
-                    "sex": profile["sex"],
-                    "set_number": 1,
+                    "exercise": exercise,
+                    "exercise_category": exercise_category,
+                    "sets": params["sets"],
                     "reps": params["reps"],
-                    "fatigue": params["target_fatigue"],
-                    "rir": params["target_rir"],
-                    "prev_weight": history["prev_weight"],
-                    "prev_reps": history["prev_reps"],
-                    "prev_rir": history["prev_rir"],
-                    "prev_fatigue": history["prev_fatigue"],
-                    "prev_volume": history["prev_volume"],
-                    "rolling_weight_3": history["rolling_weight_3"],
-                    "rolling_reps_3": history["rolling_reps_3"],
-                    "rolling_rir_3": history["rolling_rir_3"],
-                    "rolling_fatigue_3": history["rolling_fatigue_3"],
-                    "rolling_volume_3": history["rolling_volume_3"],
+                    "target_rir": params["target_rir"],
+                    "target_fatigue": params["target_fatigue"],
+                    "model_predicted_weight": round(predicted_weight, 2),
+                    "final_recommended_weight": final_weight,
+                    "history_available": history["history_available"],
+                    "safety_adjustment": safety_adjustment,
+                    "recommendation_reason": (
+                        "Weekly demo recommendation based on split structure, "
+                        "the loaded ML model, similar-user data, user history, "
+                        "and safety rules."
+                    ),
                 }
-            ]
-        )
-
-        predicted_weight = float(model.predict(model_input)[0])
-        final_weight, safety_adjustment = apply_safety_rules(
-            predicted_weight,
-            history,
-            profile,
-        )
-        exercise_category = EXERCISE_CATEGORY_MAP.get(exercise, "other")
-
-        plan_rows.append(
-            {
-                "day": assign_training_day(recommended_split, exercise_category),
-                "split": recommended_split,
-                "exercise": exercise,
-                "sets": params["sets"],
-                "reps": params["reps"],
-                "target_rir": params["target_rir"],
-                "target_fatigue": params["target_fatigue"],
-                "model_predicted_weight": round(predicted_weight, 2),
-                "final_recommended_weight": final_weight,
-                "history_available": history["history_available"],
-                "safety_adjustment": safety_adjustment,
-                "recommendation_reason": (
-                    "Hybrid demo recommendation based on the loaded ML model, "
-                    "similar-user statistics, available user history, and safety rules."
-                ),
-            }
-        )
+            )
 
     plan_df = pd.DataFrame(plan_rows)
     metadata = {
@@ -549,7 +568,11 @@ def generate_training_plan(profile, model, data, user_id=None, max_exercises=6):
         "split_reason": split_reason,
         "similar_user_filters": filters_used,
         "used_user_history": history_used,
-        "exercise_count": len(plan_df),
+        "day_count": len(weekly_templates),
+        "total_exercises": len(plan_df),
+        "avg_exercises_per_day": (
+            len(plan_df) / len(weekly_templates) if len(weekly_templates) else 0
+        ),
     }
     return plan_df, metadata
 
@@ -614,7 +637,9 @@ def build_scenario_summary_row(profile, plan_df, metadata):
         "phase": profile["phase"],
         "days_per_week": profile["days_per_week"],
         "recommended_split": metadata["recommended_split"],
-        "exercise_count": metadata["exercise_count"],
+        "day_count": metadata["day_count"],
+        "total_exercises": metadata["total_exercises"],
+        "avg_exercises_per_day": metadata["avg_exercises_per_day"],
         "avg_recommended_weight": plan_df["final_recommended_weight"].mean(),
         "avg_target_rir": plan_df["target_rir"].mean(),
         "history_used": metadata["used_user_history"],
@@ -632,7 +657,6 @@ def run_demo_scenarios(scenarios, model, data):
             model=model,
             data=data,
             user_id=profile.get("user_id"),
-            max_exercises=6,
         )
         scenario_name = profile["name"]
         plan_path = os.path.join(OUTPUT_DIR, f"plan_{scenario_name}.csv")
@@ -653,14 +677,15 @@ def save_stage3_summary(scenario_count):
 STAGE 3 SUMMARY
 
 Generated scenarios: {scenario_count}
-Plan files: {OUTPUT_DIR}/plan_<scenario_name>.csv
+Weekly plan files: {OUTPUT_DIR}/plan_<scenario_name>.csv
 Scenario comparison: {OUTPUT_DIR}/scenario_comparison.csv
 
 The trained model was loaded from:
 {MODEL_PATH}
 
 Stage 3 does not train models. It demonstrates the end-to-end system flow using
-the model produced in Stage 2.
+the model produced in Stage 2. Each scenario contains a full weekly training
+plan based on the selected split and the requested number of training days.
 
 Recommendations are demonstrational and require expert validation before real
 training use.
