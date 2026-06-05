@@ -451,6 +451,77 @@ def default_safety_scenario() -> tuple[list[str], int]:
     return available, 0
 
 
+def filter_dataset_users(
+    dataset_df: pd.DataFrame,
+    level_filter: str,
+    sex_filter: str,
+) -> pd.DataFrame:
+    """Filter dataset rows by user-level filters."""
+    filtered = dataset_df.copy()
+    if level_filter != "all" and "level" in filtered.columns:
+        filtered = filtered[filtered["level"] == level_filter]
+    if sex_filter != "all" and "sex" in filtered.columns:
+        filtered = filtered[filtered["sex"] == sex_filter]
+    return filtered
+
+
+def calculate_epley_e1rm(df: pd.DataFrame) -> pd.DataFrame:
+    """Add approximate Epley e1RM values to a dataset slice."""
+    e1rm_df = df.copy()
+    if {"weight", "reps"}.issubset(e1rm_df.columns):
+        e1rm_df["e1rm_epley"] = (
+            pd.to_numeric(e1rm_df["weight"], errors="coerce")
+            * (1 + pd.to_numeric(e1rm_df["reps"], errors="coerce") / 30)
+        )
+    return e1rm_df
+
+
+def build_lift_ranking(
+    dataset_df: pd.DataFrame,
+    value_column: str = "max_weight",
+) -> pd.DataFrame:
+    """Build a pivot ranking for main lift values."""
+    dataset_df = dataset_df.copy()
+    if value_column == "max_weight" and "max_weight" not in dataset_df.columns and "weight" in dataset_df.columns:
+        dataset_df["max_weight"] = pd.to_numeric(dataset_df["weight"], errors="coerce")
+
+    required_columns = {"user_id", "sex", "level", "exercise", value_column}
+    if not required_columns.issubset(dataset_df.columns):
+        return pd.DataFrame()
+
+    main_lifts = [
+        "Bench Press",
+        "Squat",
+        "Deadlift",
+        "Barbell Row",
+        "Shoulder Press",
+        "Leg Press",
+    ]
+    ranking_source = dataset_df[dataset_df["exercise"].isin(main_lifts)].copy()
+    if ranking_source.empty:
+        return pd.DataFrame()
+
+    ranking = ranking_source.pivot_table(
+        index=["user_id", "sex", "level"],
+        columns="exercise",
+        values=value_column,
+        aggfunc="max",
+    ).reset_index()
+    ranking.columns.name = None
+
+    sort_candidates = ["Bench Press"] + [lift for lift in main_lifts if lift != "Bench Press"]
+    sort_column = next((column for column in sort_candidates if column in ranking.columns), None)
+    if sort_column is not None:
+        ranking = ranking.sort_values(sort_column, ascending=False, na_position="last")
+
+    return ranking.head(30)
+
+
+def filter_option_default(options: list[str], preferred: str) -> int:
+    """Return the index for a preferred filter option when available."""
+    return options.index(preferred) if preferred in options else 0
+
+
 def render_overview_tab(dataset_df: pd.DataFrame | None) -> None:
     st.title("Training AI Project")
     st.subheader("Projekt i implementacja systemu sztucznej inteligencji do analizy danych treningowych")
@@ -524,9 +595,71 @@ def render_dataset_tab(dataset_df: pd.DataFrame | None) -> None:
         return
 
     st.subheader("Analiza wybranego użytkownika")
-    users = sorted(dataset_df["user_id"].dropna().unique().tolist())
+    filter_col_a, filter_col_b = st.columns(2)
+    level_options = ["all", "beginner", "intermediate", "advanced"]
+    sex_options = ["all", "female", "male"]
+    available_levels = (
+        set(dataset_df["level"].dropna().astype(str).unique())
+        if "level" in dataset_df.columns
+        else set()
+    )
+    available_sexes = (
+        set(dataset_df["sex"].dropna().astype(str).unique())
+        if "sex" in dataset_df.columns
+        else set()
+    )
+    level_filter = filter_col_a.selectbox(
+        "Poziom",
+        level_options,
+        index=filter_option_default(level_options, "advanced" if "advanced" in available_levels else "all"),
+        key="dataset_level_filter",
+    )
+    sex_filter = filter_col_b.selectbox(
+        "Płeć",
+        sex_options,
+        index=filter_option_default(sex_options, "male" if "male" in available_sexes else "all"),
+        key="dataset_sex_filter",
+    )
+    st.caption(
+        "Filtry pomagają sprawdzić, jakie wyniki mają użytkownicy z wybranego poziomu zaawansowania, np. advanced male."
+    )
+
+    filtered_group_df = filter_dataset_users(dataset_df, level_filter, sex_filter)
+    group_cols = st.columns(6)
+    group_cols[0].metric("Rekordy grupy", format_number(len(filtered_group_df)))
+    group_cols[1].metric("Użytkownicy", format_number(safe_nunique(filtered_group_df, "user_id")))
+    group_cols[2].metric("Sesje", format_number(safe_nunique(filtered_group_df, "session_id")))
+    group_cols[3].metric("Ćwiczenia", format_number(safe_nunique(filtered_group_df, "exercise")))
+    group_cols[4].metric("Śr. ciężar", format_number(numeric_mean(filtered_group_df, "weight"), " kg"))
+    max_weight = (
+        pd.to_numeric(filtered_group_df["weight"], errors="coerce").max()
+        if "weight" in filtered_group_df.columns and not filtered_group_df.empty
+        else None
+    )
+    group_cols[5].metric("Maks. ciężar", format_number(max_weight, " kg"))
+
+    users = sorted(filtered_group_df["user_id"].dropna().unique().tolist())
+    if not users:
+        st.warning("Brak użytkowników spełniających wybrane filtry.")
+        return
+
+    with st.expander("Ranking użytkowników w wybranej grupie", expanded=False):
+        ranking_df = build_lift_ranking(filtered_group_df, value_column="max_weight")
+        if ranking_df.empty:
+            st.info("Brak danych do zbudowania rankingu głównych ćwiczeń.")
+        else:
+            st.dataframe(ranking_df, use_container_width=True)
+
+    with st.expander("Ranking użytkowników według e1RM", expanded=False):
+        e1rm_group_df = calculate_epley_e1rm(filtered_group_df)
+        e1rm_ranking_df = build_lift_ranking(e1rm_group_df, value_column="e1rm_epley")
+        if e1rm_ranking_df.empty:
+            st.info("Brak danych do zbudowania rankingu e1RM.")
+        else:
+            st.dataframe(e1rm_ranking_df, use_container_width=True)
+
     selected_user = st.selectbox("Wybierz user_id", users, key="dataset_user_id")
-    user_df = dataset_df[dataset_df["user_id"] == selected_user].copy()
+    user_df = filtered_group_df[filtered_group_df["user_id"] == selected_user].copy()
 
     user_dates = (
         pd.to_datetime(user_df["date"], errors="coerce")
