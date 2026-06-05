@@ -1,0 +1,6 @@
+scenario_name,age,sex,level,phase,days_per_week,recommended_split,day_count,total_exercises,avg_exercises_per_day,avg_recommended_weight,avg_target_rir,history_used,notes
+beginner_female_hypertrophy,24,female,beginner,hypertrophy,3,ppl,3,15,5.0,13.5,2.0,False,Selected PPL because the profile has 3 training days.
+intermediate_male_strength,32,male,intermediate,strength,4,upper_lower,4,22,5.5,21.363636363636363,2.0,False,Selected upper/lower because the profile has 4 training days.
+advanced_male_deload,38,male,advanced,deload,3,ppl,3,15,5.0,24.0,4.0,False,Selected PPL because the profile has 3 training days.
+older_beginner_hypertrophy,62,male,beginner,hypertrophy,2,fbw,2,12,6.0,25.833333333333332,2.0,False,Selected FBW because the profile has at most 2 training days.
+existing_user_with_history,30,male,advanced,hypertrophy,3,ppl,3,15,5.0,35.166666666666664,2.0,True,Selected PPL because the profile has 3 training days.

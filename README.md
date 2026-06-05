@@ -228,6 +228,26 @@ lokalnie jako `models/best_weight_prediction_model.joblib`. Plik `.joblib` nie
 jest commitowany zwykłym Gitem ze względu na rozmiar; w przyszłości może zostać
 udostępniony przez GitHub Release albo Git LFS.
 
+## Dashboard Streamlit
+
+Etap 4 projektu udostępnia dashboard demonstracyjny w Streamlit. Aplikacja
+prezentuje w jednym miejscu generator danych, dataset, wyniki EDA, rolę modelu
+ML, system rekomendacyjny, przykładowe plany treningowe oraz reguły
+bezpieczeństwa.
+
+Uruchomienie dashboardu:
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Dashboard działa w trybie prezentacyjnym na małych plikach CSV zapisanych w
+`app/demo_assets/`. Generowanie planu na żywo wymaga lokalnego modelu:
+
+```text
+models/best_weight_prediction_model.joblib
+```
+
 ## Ograniczenia
 
 Najważniejsze ograniczenia projektu:
