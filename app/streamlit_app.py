@@ -42,6 +42,17 @@ PLAN_DISPLAY_COLUMNS = [
     "safety_adjustment",
 ]
 
+PLAN_COLUMN_LABELS = {
+    "day_name": "Dzień",
+    "exercise": "Ćwiczenie",
+    "sets": "Serie",
+    "reps": "Powtórzenia",
+    "target_rir": "RIR",
+    "target_fatigue": "Zmęczenie",
+    "final_recommended_weight": "Ciężar",
+    "safety_adjustment": "Korekta",
+}
+
 SAFETY_RULE_DESCRIPTIONS = {
     "no_adjustment": "Brak korekty. Rekomendacja modelu mieści się w bezpiecznym zakresie.",
     "limited_by_progression_cap": "Ciężar ograniczony przez maksymalny dopuszczalny skok progresji.",
@@ -182,20 +193,22 @@ def compact_bar_chart(
     x_label: str,
     y_label: str,
     color: str = "#3B82F6",
-    height: float = 3.0,
+    height: float = 2.8,
 ) -> None:
     """Render a compact bar chart for dashboard panels."""
     if series.empty:
         st.info(f"Brak danych dla wykresu: {title}.")
         return
 
-    fig, ax = plt.subplots(figsize=(6.2, height))
+    fig, ax = plt.subplots(figsize=(5.8, height))
     sns.barplot(x=series.index.astype(str), y=series.values, ax=ax, color=color)
     ax.set_title(title, fontsize=11)
     ax.set_xlabel(x_label, fontsize=9)
     ax.set_ylabel(y_label, fontsize=9)
-    ax.tick_params(axis="x", rotation=25, labelsize=8)
+    ax.tick_params(axis="x", rotation=20, labelsize=8)
     ax.tick_params(axis="y", labelsize=8)
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
     fig.tight_layout()
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
@@ -242,7 +255,57 @@ def show_missing_demo_assets_info() -> None:
 def get_plan_display(plan_df: pd.DataFrame) -> pd.DataFrame:
     """Return a simplified plan table for presentation."""
     columns = [column for column in PLAN_DISPLAY_COLUMNS if column in plan_df.columns]
-    return plan_df[columns].copy()
+    display_df = plan_df[columns].copy()
+    return display_df.rename(columns=PLAN_COLUMN_LABELS)
+
+
+def format_plan_number(value: Any, decimals: int = 1) -> str:
+    """Format one plan value without noisy trailing decimals."""
+    if value is None or pd.isna(value):
+        return "brak"
+    number = float(value)
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.{decimals}f}"
+
+
+def render_plan_day_list(plan_df: pd.DataFrame) -> None:
+    """Render a training plan as a readable day-by-day list."""
+    if plan_df.empty:
+        st.info("Plan jest pusty.")
+        return
+
+    required_columns = {"day_name", "exercise"}
+    if not required_columns.issubset(plan_df.columns):
+        st.warning("Plan nie zawiera kolumn wymaganych do widoku listy dni.")
+        return
+
+    sort_columns = [
+        column
+        for column in ["day_number", "exercise_order", "day_name"]
+        if column in plan_df.columns
+    ]
+    sorted_plan = plan_df.sort_values(sort_columns) if sort_columns else plan_df
+
+    for day_name, day_df in sorted_plan.groupby("day_name", sort=False):
+        with st.container(border=True):
+            st.markdown(f"#### {day_name}")
+            for position, row in enumerate(day_df.itertuples(index=False), start=1):
+                row_data = row._asdict()
+                sets = format_plan_number(row_data.get("sets"), decimals=0)
+                reps = format_plan_number(row_data.get("reps"), decimals=0)
+                weight = format_plan_number(row_data.get("final_recommended_weight"))
+                rir = format_plan_number(row_data.get("target_rir"))
+                fatigue = format_plan_number(row_data.get("target_fatigue"))
+                adjustment = row_data.get("safety_adjustment", "brak")
+                exercise = row_data.get("exercise", "brak")
+
+                st.markdown(
+                    f"**{position}. {exercise}**  \n"
+                    f"{sets} serie × {reps} powtórzeń  \n"
+                    f"Ciężar: **{weight} kg** | RIR: **{rir}** | Zmęczenie: **{fatigue}**  \n"
+                    f"Korekta: `{adjustment}`"
+                )
 
 
 def plan_metrics(plan_df: pd.DataFrame) -> dict[str, float | int | None]:
@@ -280,6 +343,19 @@ def render_plan_kpis(plan_df: pd.DataFrame) -> None:
         format_number(metrics["safety_count"]),
         format_number(metrics["safety_percent"], "%"),
     )
+
+
+def default_safety_scenario() -> tuple[list[str], int]:
+    """Choose the default safety scenario from available demo plans."""
+    available = [scenario for scenario in SCENARIOS if load_plan(scenario) is not None]
+    if not available:
+        return list(SCENARIOS.keys()), 0
+
+    for preferred in ["existing_user_with_history", "advanced_male_deload"]:
+        if preferred in available:
+            return available, available.index(preferred)
+
+    return available, 0
 
 
 def render_overview_tab(dataset_df: pd.DataFrame | None) -> None:
@@ -565,8 +641,11 @@ def render_recommendation_tab(demo_assets: dict[str, pd.DataFrame | None]) -> No
     st.subheader("KPI planu")
     render_plan_kpis(selected_plan)
 
-    st.subheader("Uproszczony plan treningowy")
-    st.dataframe(get_plan_display(selected_plan), use_container_width=True)
+    st.subheader("Plan treningowy")
+    render_plan_day_list(selected_plan)
+
+    with st.expander("Uproszczona tabela planu", expanded=False):
+        st.dataframe(get_plan_display(selected_plan), use_container_width=True)
 
     with st.expander("Pełna tabela techniczna planu", expanded=False):
         st.dataframe(selected_plan, use_container_width=True)
@@ -579,9 +658,7 @@ def render_safety_rules_tab() -> None:
         "jest korygowana przez reguły zależne od poziomu, fazy, zmęczenia, RIR i wieku."
     )
 
-    scenario_default = st.session_state.get("selected_scenario", "beginner_female_hypertrophy")
-    scenario_names = list(SCENARIOS.keys())
-    default_index = scenario_names.index(scenario_default) if scenario_default in scenario_names else 0
+    scenario_names, default_index = default_safety_scenario()
     selected_scenario = st.selectbox(
         "Scenariusz do analizy bezpieczeństwa",
         scenario_names,
@@ -611,7 +688,7 @@ def render_safety_rules_tab() -> None:
             adjusted = selected_plan[selected_plan["safety_adjustment"] != "no_adjustment"]
             st.subheader("Ćwiczenia z korektą")
             if adjusted.empty:
-                st.info("W wybranym planie nie ma korekt innych niż `no_adjustment`.")
+                st.info("W tym scenariuszu model mieścił się w bezpiecznym zakresie, więc nie zastosowano dodatkowych korekt.")
             else:
                 columns_to_show = [
                     column
@@ -707,7 +784,10 @@ def render_live_generator_tab(dataset_df: pd.DataFrame | None) -> None:
     st.caption(metadata["split_reason"])
 
     render_plan_kpis(plan_df)
-    st.dataframe(get_plan_display(plan_df), use_container_width=True)
+    render_plan_day_list(plan_df)
+
+    with st.expander("Uproszczona tabela planu", expanded=False):
+        st.dataframe(get_plan_display(plan_df), use_container_width=True)
 
     with st.expander("Pełna tabela techniczna planu", expanded=False):
         st.dataframe(plan_df, use_container_width=True)
