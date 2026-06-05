@@ -595,7 +595,6 @@ def render_dataset_tab(dataset_df: pd.DataFrame | None) -> None:
         return
 
     st.subheader("Analiza wybranego użytkownika")
-    filter_col_a, filter_col_b = st.columns(2)
     level_options = ["all", "beginner", "intermediate", "advanced"]
     sex_options = ["all", "female", "male"]
     available_levels = (
@@ -608,6 +607,7 @@ def render_dataset_tab(dataset_df: pd.DataFrame | None) -> None:
         if "sex" in dataset_df.columns
         else set()
     )
+    filter_col_a, filter_col_b, filter_col_c = st.columns([1, 1, 1.2])
     level_filter = filter_col_a.selectbox(
         "Poziom",
         level_options,
@@ -625,6 +625,14 @@ def render_dataset_tab(dataset_df: pd.DataFrame | None) -> None:
     )
 
     filtered_group_df = filter_dataset_users(dataset_df, level_filter, sex_filter)
+    users = sorted(filtered_group_df["user_id"].dropna().unique().tolist())
+    selected_user = None
+    if users:
+        selected_user = filter_col_c.selectbox("user_id", users, key="dataset_user_id")
+    else:
+        filter_col_c.info("Brak user_id dla filtrów")
+
+    st.subheader("Podsumowanie wybranej grupy")
     group_cols = st.columns(6)
     group_cols[0].metric("Rekordy grupy", format_number(len(filtered_group_df)))
     group_cols[1].metric("Użytkownicy", format_number(safe_nunique(filtered_group_df, "user_id")))
@@ -638,60 +646,47 @@ def render_dataset_tab(dataset_df: pd.DataFrame | None) -> None:
     )
     group_cols[5].metric("Maks. ciężar", format_number(max_weight, " kg"))
 
-    users = sorted(filtered_group_df["user_id"].dropna().unique().tolist())
     if not users:
         st.warning("Brak użytkowników spełniających wybrane filtry.")
         return
 
-    with st.expander("Ranking użytkowników w wybranej grupie", expanded=False):
-        ranking_df = build_lift_ranking(filtered_group_df, value_column="max_weight")
-        if ranking_df.empty:
-            st.info("Brak danych do zbudowania rankingu głównych ćwiczeń.")
-        else:
-            st.dataframe(ranking_df, use_container_width=True)
-
-    with st.expander("Ranking użytkowników według e1RM", expanded=False):
-        e1rm_group_df = calculate_epley_e1rm(filtered_group_df)
-        e1rm_ranking_df = build_lift_ranking(e1rm_group_df, value_column="e1rm_epley")
-        if e1rm_ranking_df.empty:
-            st.info("Brak danych do zbudowania rankingu e1RM.")
-        else:
-            st.dataframe(e1rm_ranking_df, use_container_width=True)
-
-    selected_user = st.selectbox("Wybierz user_id", users, key="dataset_user_id")
     user_df = filtered_group_df[filtered_group_df["user_id"] == selected_user].copy()
-
     user_dates = (
         pd.to_datetime(user_df["date"], errors="coerce")
         if "date" in user_df.columns
         else pd.Series(dtype="datetime64[ns]")
     )
     date_range = (
-        f"{user_dates.min().date()} - {user_dates.max().date()}"
+        f"{user_dates.min().date()} — {user_dates.max().date()}"
         if user_dates.notna().any()
         else "brak"
     )
 
+    st.subheader("Profil użytkownika")
     user_cols = st.columns(6)
     user_cols[0].metric("Rekordy", format_number(len(user_df)))
     user_cols[1].metric("Sesje", format_number(safe_nunique(user_df, "session_id")))
     user_cols[2].metric("Ćwiczenia", format_number(safe_nunique(user_df, "exercise")))
-    user_cols[3].metric("Zakres dat", date_range)
-    user_cols[4].metric("Śr. RIR", format_number(numeric_mean(user_df, "rir")))
-    user_cols[5].metric("Śr. fatigue", format_number(numeric_mean(user_df, "fatigue")))
-
-    st.metric("Suma volume użytkownika", format_number(user_df["volume"].sum() if "volume" in user_df.columns else None))
+    user_cols[3].metric("Śr. RIR", format_number(numeric_mean(user_df, "rir")))
+    user_cols[4].metric("Śr. fatigue", format_number(numeric_mean(user_df, "fatigue")))
+    user_cols[5].metric(
+        "Suma volume",
+        format_number(user_df["volume"].sum() if "volume" in user_df.columns else None),
+    )
+    st.caption(f"Zakres dat użytkownika: {date_range}")
 
     left_col, right_col = st.columns([1, 1])
     with left_col:
         if "exercise" in user_df.columns:
-            compact_bar_chart(
-                user_df["exercise"].value_counts().head(10),
-                "Top ćwiczeń użytkownika",
-                "Ćwiczenie",
-                "Liczba serii",
-                color="#0F766E",
+            top_exercises = (
+                user_df["exercise"]
+                .value_counts()
+                .head(10)
+                .rename_axis("Ćwiczenie")
+                .reset_index(name="Liczba serii")
             )
+            st.markdown("**Top ćwiczeń użytkownika**")
+            st.bar_chart(top_exercises, x="Ćwiczenie", y="Liczba serii", use_container_width=True)
             st.caption("Najczęściej wykonywane ćwiczenia dla wybranego użytkownika.")
     with right_col:
         comparison_rows = []
@@ -717,6 +712,25 @@ def render_dataset_tab(dataset_df: pd.DataFrame | None) -> None:
         st.subheader("Trend miesięcznego volume użytkownika")
         st.line_chart(user_monthly_volume, use_container_width=True)
         st.caption("Suma objętości treningowej użytkownika w kolejnych miesiącach.")
+
+    with st.expander("Ranking siłowy użytkowników w wybranej grupie", expanded=False):
+        st.caption(
+            "Tabela pokazuje maksymalne ciężary w głównych ćwiczeniach dla użytkowników spełniających aktualne filtry."
+        )
+        ranking_df = build_lift_ranking(filtered_group_df, value_column="max_weight")
+        if ranking_df.empty:
+            st.info("Brak danych do zbudowania rankingu głównych ćwiczeń.")
+        else:
+            st.dataframe(ranking_df, use_container_width=True)
+
+    with st.expander("Ranking użytkowników według e1RM", expanded=False):
+        st.caption("e1RM = weight * (1 + reps / 30)")
+        e1rm_group_df = calculate_epley_e1rm(filtered_group_df)
+        e1rm_ranking_df = build_lift_ranking(e1rm_group_df, value_column="e1rm_epley")
+        if e1rm_ranking_df.empty:
+            st.info("Brak danych do zbudowania rankingu e1RM.")
+        else:
+            st.dataframe(e1rm_ranking_df, use_container_width=True)
 
     with st.expander("Podgląd danych wybranego użytkownika", expanded=False):
         st.dataframe(user_df.head(200), use_container_width=True)
