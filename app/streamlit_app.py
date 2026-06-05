@@ -15,7 +15,11 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from src.recommendation_engine import add_exercise_categories, generate_training_plan
+from src.recommendation_engine import (
+    add_exercise_categories,
+    generate_training_plan,
+    has_valid_strength_calibration,
+)
 
 
 DATASET_PATH = BASE_DIR / "data" / "FINAL_ENGINE_V4.csv"
@@ -40,6 +44,7 @@ PLAN_DISPLAY_COLUMNS = [
     "target_fatigue",
     "final_recommended_weight",
     "safety_adjustment",
+    "weight_source",
 ]
 
 PLAN_COLUMN_LABELS = {
@@ -51,6 +56,37 @@ PLAN_COLUMN_LABELS = {
     "target_fatigue": "Zmęczenie",
     "final_recommended_weight": "Ciężar",
     "safety_adjustment": "Korekta",
+    "weight_source": "Źródło ciężaru",
+}
+
+CALIBRATION_DEFAULTS = {
+    "beginner": {
+        "Bench Press": 35.0,
+        "Squat": 45.0,
+        "Deadlift": 55.0,
+        "Barbell Row": 35.0,
+        "Shoulder Press": 22.5,
+        "Lat Pulldown": 35.0,
+        "Leg Press": 70.0,
+    },
+    "intermediate": {
+        "Bench Press": 70.0,
+        "Squat": 95.0,
+        "Deadlift": 115.0,
+        "Barbell Row": 65.0,
+        "Shoulder Press": 45.0,
+        "Lat Pulldown": 60.0,
+        "Leg Press": 140.0,
+    },
+    "advanced": {
+        "Bench Press": 100.0,
+        "Squat": 140.0,
+        "Deadlift": 170.0,
+        "Barbell Row": 90.0,
+        "Shoulder Press": 65.0,
+        "Lat Pulldown": 85.0,
+        "Leg Press": 220.0,
+    },
 }
 
 SAFETY_RULE_DESCRIPTIONS = {
@@ -299,12 +335,19 @@ def render_plan_day_list(plan_df: pd.DataFrame) -> None:
                 fatigue = format_plan_number(row_data.get("target_fatigue"))
                 adjustment = row_data.get("safety_adjustment", "brak")
                 exercise = row_data.get("exercise", "brak")
+                weight_source = row_data.get("weight_source")
+                source_line = (
+                    f"  \nŹródło ciężaru: `{weight_source}`"
+                    if weight_source is not None and not pd.isna(weight_source)
+                    else ""
+                )
 
                 st.markdown(
                     f"**{position}. {exercise}**  \n"
                     f"{sets} serie × {reps} powtórzeń  \n"
                     f"Ciężar: **{weight} kg** | RIR: **{rir}** | Zmęczenie: **{fatigue}**  \n"
                     f"Korekta: `{adjustment}`"
+                    f"{source_line}"
                 )
 
 
@@ -700,6 +743,7 @@ def render_safety_rules_tab() -> None:
                         "target_rir",
                         "target_fatigue",
                         "safety_adjustment",
+                        "weight_source",
                     ]
                     if column in adjusted.columns
                 ]
@@ -708,6 +752,94 @@ def render_safety_rules_tab() -> None:
     st.subheader("Znaczenie reguł")
     for rule_name, description in SAFETY_RULE_DESCRIPTIONS.items():
         st.markdown(f"- `{rule_name}` - {description}")
+
+
+def infer_user_profile(dataset_df: pd.DataFrame, user_id: Any) -> dict[str, Any]:
+    """Infer stable profile fields from a selected dataset user."""
+    user_df = dataset_df[dataset_df["user_id"] == user_id]
+    profile = {}
+    for column in ["sex", "level"]:
+        if column in user_df.columns and not user_df[column].dropna().empty:
+            profile[column] = user_df[column].mode().iloc[0]
+    return profile
+
+
+def option_index(options: list[str], value: Any, default: str) -> int:
+    """Return a safe selectbox index."""
+    selected = value if value in options else default
+    return options.index(selected)
+
+
+def render_strength_calibration_inputs(level: str) -> dict[str, float]:
+    """Render strength calibration inputs for a new user."""
+    defaults = CALIBRATION_DEFAULTS[level]
+    st.markdown("**Kalibracja siłowa - aktualne ciężary robocze**")
+    st.caption("Podaj ciężary używane roboczo, a nie rekordy maksymalne. Wartości opcjonalne można zostawić jako 0.")
+
+    col_a, col_b, col_c = st.columns(3)
+    bench = col_a.number_input(
+        "Bench Press working weight",
+        min_value=0.0,
+        max_value=350.0,
+        value=defaults["Bench Press"],
+        step=2.5,
+    )
+    squat = col_b.number_input(
+        "Squat working weight",
+        min_value=0.0,
+        max_value=450.0,
+        value=defaults["Squat"],
+        step=2.5,
+    )
+    deadlift = col_c.number_input(
+        "Deadlift working weight",
+        min_value=0.0,
+        max_value=500.0,
+        value=defaults["Deadlift"],
+        step=2.5,
+    )
+
+    col_d, col_e = st.columns(2)
+    row = col_d.number_input(
+        "Barbell Row working weight",
+        min_value=0.0,
+        max_value=300.0,
+        value=defaults["Barbell Row"],
+        step=2.5,
+    )
+    shoulder_press = col_e.number_input(
+        "Shoulder Press working weight",
+        min_value=0.0,
+        max_value=250.0,
+        value=defaults["Shoulder Press"],
+        step=2.5,
+    )
+
+    col_f, col_g = st.columns(2)
+    lat_pulldown = col_f.number_input(
+        "Lat Pulldown working weight (opcjonalnie)",
+        min_value=0.0,
+        max_value=300.0,
+        value=defaults["Lat Pulldown"],
+        step=2.5,
+    )
+    leg_press = col_g.number_input(
+        "Leg Press working weight (opcjonalnie)",
+        min_value=0.0,
+        max_value=600.0,
+        value=defaults["Leg Press"],
+        step=2.5,
+    )
+
+    return {
+        "Bench Press": bench,
+        "Squat": squat,
+        "Deadlift": deadlift,
+        "Barbell Row": row,
+        "Shoulder Press": shoulder_press,
+        "Lat Pulldown": lat_pulldown,
+        "Leg Press": leg_press,
+    }
 
 
 def render_live_generator_tab(dataset_df: pd.DataFrame | None) -> None:
@@ -732,25 +864,95 @@ def render_live_generator_tab(dataset_df: pd.DataFrame | None) -> None:
         return
 
     st.success("Model dostępny lokalnie. Możesz wygenerować demonstracyjny plan na żywo.")
-    user_options: list[Any] = ["brak"]
+    user_options: list[Any] = []
     if "user_id" in dataset_df.columns:
         user_options.extend(sorted(dataset_df["user_id"].dropna().unique().tolist()))
 
+    generator_mode = st.radio(
+        "Tryb generowania",
+        [
+            "Użytkownik z historią danych",
+            "Nowy użytkownik z kalibracją siłową",
+        ],
+        horizontal=True,
+    )
+
+    if generator_mode == "Użytkownik z historią danych":
+        st.info("Ten tryb wykorzystuje historię użytkownika z danych syntetycznych.")
+    else:
+        st.info(
+            "Dla nowego użytkownika bez historii system wymaga kalibracji siłowej. "
+            "Sam wiek, płeć i poziom zaawansowania nie wystarczają do wiarygodnego "
+            "przewidywania absolutnych ciężarów."
+        )
+
     with st.form("live_generator_form"):
-        col_a, col_b, col_c = st.columns(3)
-        age = col_a.number_input("Wiek", min_value=16, max_value=90, value=30)
-        sex = col_b.selectbox("Płeć", ["female", "male"])
-        level = col_c.selectbox("Poziom", ["beginner", "intermediate", "advanced"])
+        strength_calibration = None
+        selected_user_id = None
 
-        col_d, col_e, col_f = st.columns(3)
-        phase = col_d.selectbox("Faza", ["hypertrophy", "strength", "deload"])
-        days_per_week = col_e.number_input("Dni treningowe w tygodniu", min_value=2, max_value=6, value=3)
-        selected_user_id = col_f.selectbox("Historia user_id", user_options)
+        if generator_mode == "Użytkownik z historią danych":
+            if not user_options:
+                st.warning("Dataset nie zawiera `user_id`, więc ten tryb jest niedostępny.")
+                submitted = st.form_submit_button("Generuj plan", disabled=True)
+            else:
+                selected_user_id = st.selectbox("user_id", user_options)
+                inferred_profile = infer_user_profile(dataset_df, selected_user_id)
+                col_a, col_b, col_c = st.columns(3)
+                age = col_a.number_input("Wiek", min_value=16, max_value=90, value=30)
+                sex = col_b.selectbox(
+                    "Płeć",
+                    ["female", "male"],
+                    index=option_index(["female", "male"], inferred_profile.get("sex"), "male"),
+                )
+                level = col_c.selectbox(
+                    "Poziom",
+                    ["beginner", "intermediate", "advanced"],
+                    index=option_index(
+                        ["beginner", "intermediate", "advanced"],
+                        inferred_profile.get("level"),
+                        "intermediate",
+                    ),
+                )
 
-        submitted = st.form_submit_button("Generuj plan")
+                col_d, col_e = st.columns(2)
+                phase = col_d.selectbox("Faza", ["hypertrophy", "strength", "deload"])
+                days_per_week = col_e.number_input(
+                    "Dni treningowe w tygodniu",
+                    min_value=2,
+                    max_value=6,
+                    value=3,
+                )
+                submitted = st.form_submit_button("Generuj plan")
+        else:
+            col_a, col_b, col_c = st.columns(3)
+            age = col_a.number_input("Wiek", min_value=16, max_value=90, value=31)
+            sex = col_b.selectbox("Płeć", ["female", "male"], index=1)
+            level = col_c.selectbox(
+                "Poziom",
+                ["beginner", "intermediate", "advanced"],
+                index=2,
+            )
+
+            col_d, col_e = st.columns(2)
+            phase = col_d.selectbox("Faza", ["hypertrophy", "strength", "deload"], index=1)
+            days_per_week = col_e.number_input(
+                "Dni treningowe w tygodniu",
+                min_value=2,
+                max_value=6,
+                value=3,
+            )
+            strength_calibration = render_strength_calibration_inputs(level)
+            submitted = st.form_submit_button("Generuj plan")
 
     if not submitted:
         st.info("Formularz używa modelu z Etapu 2 oraz lekkiej logiki rekomendacyjnej z Etapu 3.")
+        return
+
+    if generator_mode == "Nowy użytkownik z kalibracją siłową" and not has_valid_strength_calibration(strength_calibration):
+        st.warning(
+            "Nie podano sensownych ciężarów bazowych. System może zaproponować strukturę planu, "
+            "ale nie powinien rekomendować absolutnych ciężarów bez historii lub kalibracji siłowej."
+        )
         return
 
     profile = {
@@ -761,7 +963,7 @@ def render_live_generator_tab(dataset_df: pd.DataFrame | None) -> None:
         "phase": phase,
         "days_per_week": int(days_per_week),
     }
-    user_id = None if selected_user_id == "brak" else selected_user_id
+    user_id = selected_user_id if generator_mode == "Użytkownik z historią danych" else None
     if user_id is not None:
         profile["user_id"] = user_id
 
@@ -771,6 +973,7 @@ def render_live_generator_tab(dataset_df: pd.DataFrame | None) -> None:
             model=model,
             data=add_exercise_categories(dataset_df),
             user_id=user_id,
+            strength_calibration=strength_calibration,
         )
     except Exception as error:
         st.error(f"Nie udało się wygenerować planu: {error}")

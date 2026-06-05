@@ -30,6 +30,30 @@ EXERCISE_CATEGORY_MAP = {
     "Calf Raise": "legs",
 }
 
+PHASE_WEIGHT_FACTORS = {
+    "strength": 1.0,
+    "hypertrophy": 0.88,
+    "deload": 0.7,
+}
+
+CALIBRATION_ANCHORS = {
+    "Bench Press": [("Bench Press", 1.0)],
+    "Incline Bench Press": [("Bench Press", 0.8)],
+    "Shoulder Press": [("Shoulder Press", 1.0)],
+    "Lateral Raise": [("Shoulder Press", 0.25)],
+    "Triceps Pushdown": [("Bench Press", 0.35)],
+    "Barbell Row": [("Barbell Row", 1.0)],
+    "Lat Pulldown": [("Lat Pulldown", 1.0), ("Barbell Row", 0.75)],
+    "Seated Row": [("Barbell Row", 0.75)],
+    "Rear Delt Row": [("Barbell Row", 0.35)],
+    "Biceps Curl": [("Barbell Row", 0.25)],
+    "Squat": [("Squat", 1.0)],
+    "Deadlift": [("Deadlift", 1.0)],
+    "Leg Press": [("Leg Press", 1.0), ("Squat", 1.2)],
+    "Leg Curl": [("Squat", 0.25)],
+    "Calf Raise": [("Squat", 0.5)],
+}
+
 
 def round_to_nearest(value: float, step: float = 2.5) -> float:
     """Round a weight to the nearest practical training increment."""
@@ -50,6 +74,48 @@ def safe_mode(series: pd.Series, default_value: Any = None) -> Any:
     if len(clean) == 0:
         return default_value
     return clean.mode().iloc[0]
+
+
+def normalize_strength_calibration(calibration: dict[str, Any] | None) -> dict[str, float]:
+    """Return positive strength calibration values keyed by exercise name."""
+    if not calibration:
+        return {}
+
+    normalized = {}
+    for exercise, value in calibration.items():
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if numeric_value > 0:
+            normalized[exercise] = numeric_value
+    return normalized
+
+
+def has_valid_strength_calibration(calibration: dict[str, Any] | None) -> bool:
+    """Return whether at least one usable strength anchor was provided."""
+    return len(normalize_strength_calibration(calibration)) > 0
+
+
+def get_calibrated_weight(
+    exercise: str,
+    calibration: dict[str, Any] | None,
+    phase: str,
+) -> tuple[float | None, float | None]:
+    """Estimate an exercise weight from user-provided strength anchors."""
+    normalized = normalize_strength_calibration(calibration)
+    if not normalized:
+        return None, None
+
+    for anchor_name, ratio in CALIBRATION_ANCHORS.get(exercise, []):
+        anchor_weight = normalized.get(anchor_name)
+        if anchor_weight is None:
+            continue
+        reference_weight = anchor_weight * ratio
+        phase_factor = PHASE_WEIGHT_FACTORS.get(phase, 0.88)
+        return reference_weight * phase_factor, reference_weight
+
+    return None, None
 
 
 def add_exercise_categories(data: pd.DataFrame) -> pd.DataFrame:
@@ -333,6 +399,7 @@ def generate_training_plan(
     model: Any,
     data: pd.DataFrame,
     user_id: Any = None,
+    strength_calibration: dict[str, Any] | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Generate a full weekly demo plan and return it with metadata."""
     prepared_data = data.copy()
@@ -350,9 +417,11 @@ def generate_training_plan(
         split=recommended_split,
         days_per_week=profile["days_per_week"],
     )
+    normalized_calibration = normalize_strength_calibration(strength_calibration)
 
     plan_rows = []
     history_used = False
+    calibration_used = False
 
     for template in weekly_templates:
         selected_exercises = select_exercises_for_day(
@@ -406,11 +475,40 @@ def generate_training_plan(
             )
 
             predicted_weight = float(model.predict(model_input)[0])
-            final_weight, safety_adjustment = apply_safety_rules(
-                predicted_weight,
-                history,
-                profile,
+            calibrated_weight, calibration_reference = get_calibrated_weight(
+                exercise,
+                normalized_calibration,
+                profile["phase"],
             )
+
+            if history["history_available"]:
+                final_weight, safety_adjustment = apply_safety_rules(
+                    predicted_weight,
+                    history,
+                    profile,
+                )
+                weight_source = "user_history"
+            elif calibrated_weight is not None and calibration_reference is not None:
+                safety_history = history.copy()
+                safety_history["prev_weight"] = calibration_reference
+                safety_history["rolling_weight_3"] = calibration_reference
+                safety_history["rolling_rir_3"] = params["target_rir"]
+                safety_history["rolling_fatigue_3"] = params["target_fatigue"]
+                final_weight, safety_adjustment = apply_safety_rules(
+                    calibrated_weight,
+                    safety_history,
+                    profile,
+                )
+                weight_source = "strength_calibration"
+                calibration_used = True
+            else:
+                final_weight, safety_adjustment = apply_safety_rules(
+                    predicted_weight,
+                    history,
+                    profile,
+                )
+                weight_source = "fallback_median"
+
             exercise_category = EXERCISE_CATEGORY_MAP.get(exercise, "other")
 
             plan_rows.append(
@@ -428,6 +526,7 @@ def generate_training_plan(
                     "target_fatigue": params["target_fatigue"],
                     "model_predicted_weight": round(predicted_weight, 2),
                     "final_recommended_weight": final_weight,
+                    "weight_source": weight_source,
                     "history_available": history["history_available"],
                     "safety_adjustment": safety_adjustment,
                     "recommendation_reason": (
@@ -445,6 +544,8 @@ def generate_training_plan(
         "split_reason": split_reason,
         "similar_user_filters": filters_used,
         "used_user_history": history_used,
+        "used_strength_calibration": calibration_used,
+        "strength_calibration": normalized_calibration,
         "day_count": len(weekly_templates),
         "total_exercises": len(plan_df),
         "avg_exercises_per_day": (
