@@ -54,9 +54,24 @@ PLAN_COLUMN_LABELS = {
     "reps": "Powtórzenia",
     "target_rir": "RIR",
     "target_fatigue": "Zmęczenie",
-    "final_recommended_weight": "Ciężar",
+    "final_recommended_weight": "Sugerowany ciężar",
     "safety_adjustment": "Korekta",
     "weight_source": "Źródło ciężaru",
+}
+
+SAFETY_ADJUSTMENT_LABELS = {
+    "no_adjustment": "brak korekty",
+    "limited_by_progression_cap": "ograniczono progresję",
+    "limited_by_high_fatigue_or_low_rir": "ograniczono przez zmęczenie / niski RIR",
+    "deload_reduction": "redukcja w fazie deload",
+    "age_adjusted_progression_cap": "ograniczenie ze względu na wiek",
+}
+
+WEIGHT_SOURCE_LABELS = {
+    "strength_calibration": "kalibracja siłowa",
+    "user_history": "historia użytkownika",
+    "model_prediction": "predykcja modelu",
+    "fallback_median": "wartość orientacyjna z danych",
 }
 
 CALIBRATION_DEFAULTS = {
@@ -288,10 +303,32 @@ def show_missing_demo_assets_info() -> None:
     )
 
 
+def display_label(value: Any, labels: dict[str, str]) -> Any:
+    """Return a user-facing label for a technical value."""
+    if value is None or pd.isna(value):
+        return value
+    return labels.get(str(value), value)
+
+
+def translated_series(series: pd.Series, labels: dict[str, str]) -> pd.Series:
+    """Translate a pandas Series of technical values for display."""
+    return series.map(lambda value: display_label(value, labels))
+
+
 def get_plan_display(plan_df: pd.DataFrame) -> pd.DataFrame:
     """Return a simplified plan table for presentation."""
     columns = [column for column in PLAN_DISPLAY_COLUMNS if column in plan_df.columns]
     display_df = plan_df[columns].copy()
+    if "safety_adjustment" in display_df.columns:
+        display_df["safety_adjustment"] = translated_series(
+            display_df["safety_adjustment"],
+            SAFETY_ADJUSTMENT_LABELS,
+        )
+    if "weight_source" in display_df.columns:
+        display_df["weight_source"] = translated_series(
+            display_df["weight_source"],
+            WEIGHT_SOURCE_LABELS,
+        )
     return display_df.rename(columns=PLAN_COLUMN_LABELS)
 
 
@@ -322,6 +359,14 @@ def render_plan_day_list(plan_df: pd.DataFrame) -> None:
         if column in plan_df.columns
     ]
     sorted_plan = plan_df.sort_values(sort_columns) if sort_columns else plan_df
+    source_values = []
+    if "weight_source" in sorted_plan.columns:
+        source_values = sorted_plan["weight_source"].dropna().astype(str).unique().tolist()
+
+    show_source_per_exercise = len(source_values) > 1
+    if len(source_values) == 1:
+        source_label = display_label(source_values[0], WEIGHT_SOURCE_LABELS)
+        st.info(f"Źródło sugerowanych ciężarów: {source_label}")
 
     for day_name, day_df in sorted_plan.groupby("day_name", sort=False):
         with st.container(border=True):
@@ -333,19 +378,22 @@ def render_plan_day_list(plan_df: pd.DataFrame) -> None:
                 weight = format_plan_number(row_data.get("final_recommended_weight"))
                 rir = format_plan_number(row_data.get("target_rir"))
                 fatigue = format_plan_number(row_data.get("target_fatigue"))
-                adjustment = row_data.get("safety_adjustment", "brak")
+                adjustment = display_label(
+                    row_data.get("safety_adjustment", "brak"),
+                    SAFETY_ADJUSTMENT_LABELS,
+                )
                 exercise = row_data.get("exercise", "brak")
                 weight_source = row_data.get("weight_source")
                 source_line = (
-                    f"  \nŹródło ciężaru: `{weight_source}`"
-                    if weight_source is not None and not pd.isna(weight_source)
+                    f"  \nŹródło sugerowanego ciężaru: `{display_label(weight_source, WEIGHT_SOURCE_LABELS)}`"
+                    if show_source_per_exercise and weight_source is not None and not pd.isna(weight_source)
                     else ""
                 )
 
                 st.markdown(
                     f"**{position}. {exercise}**  \n"
                     f"{sets} serie × {reps} powtórzeń  \n"
-                    f"Ciężar: **{weight} kg** | RIR: **{rir}** | Zmęczenie: **{fatigue}**  \n"
+                    f"Sugerowany ciężar: **{weight} kg** | RIR: **{rir}** | Zmęczenie: **{fatigue}**  \n"
                     f"Korekta: `{adjustment}`"
                     f"{source_line}"
                 )
@@ -359,7 +407,8 @@ def plan_metrics(plan_df: pd.DataFrame) -> dict[str, float | int | None]:
 
     return {
         "day_count": safe_nunique(plan_df, "day_number"),
-        "exercise_count": safe_nunique(plan_df, "exercise"),
+        "plan_item_count": len(plan_df),
+        "unique_exercise_count": safe_nunique(plan_df, "exercise"),
         "avg_weight": numeric_mean(plan_df, "final_recommended_weight"),
         "avg_rir": numeric_mean(plan_df, "target_rir"),
         "history_count": (
@@ -375,13 +424,14 @@ def plan_metrics(plan_df: pd.DataFrame) -> dict[str, float | int | None]:
 def render_plan_kpis(plan_df: pd.DataFrame) -> None:
     """Render training-plan KPIs."""
     metrics = plan_metrics(plan_df)
-    cols = st.columns(6)
+    cols = st.columns(7)
     cols[0].metric("Dni", format_number(metrics["day_count"]))
-    cols[1].metric("Ćwiczenia", format_number(metrics["exercise_count"]))
-    cols[2].metric("Śr. ciężar", format_number(metrics["avg_weight"], " kg"))
-    cols[3].metric("Śr. RIR", format_number(metrics["avg_rir"]))
-    cols[4].metric("Z historią", format_number(metrics["history_count"]))
-    cols[5].metric(
+    cols[1].metric("Pozycje planu", format_number(metrics["plan_item_count"]))
+    cols[2].metric("Unikalne ćwiczenia", format_number(metrics["unique_exercise_count"]))
+    cols[3].metric("Śr. sugerowany ciężar", format_number(metrics["avg_weight"], " kg"))
+    cols[4].metric("Śr. RIR", format_number(metrics["avg_rir"]))
+    cols[5].metric("Z historią", format_number(metrics["history_count"]))
+    cols[6].metric(
         "Korekty bezpieczeństwa",
         format_number(metrics["safety_count"]),
         format_number(metrics["safety_percent"], "%"),
@@ -718,8 +768,11 @@ def render_safety_rules_tab() -> None:
         chart_col, table_col = st.columns([1, 1.4])
         with chart_col:
             compact_bar_chart(
-                selected_plan["safety_adjustment"].value_counts(),
-                "Rozkład safety_adjustment",
+                translated_series(
+                    selected_plan["safety_adjustment"],
+                    SAFETY_ADJUSTMENT_LABELS,
+                ).value_counts(),
+                "Rozkład korekt bezpieczeństwa",
                 "Korekta",
                 "Liczba ćwiczeń",
                 color="#DC2626",
@@ -747,7 +800,30 @@ def render_safety_rules_tab() -> None:
                     ]
                     if column in adjusted.columns
                 ]
-                st.dataframe(adjusted[columns_to_show], use_container_width=True)
+                adjusted_display = adjusted[columns_to_show].copy()
+                if "safety_adjustment" in adjusted_display.columns:
+                    adjusted_display["safety_adjustment"] = translated_series(
+                        adjusted_display["safety_adjustment"],
+                        SAFETY_ADJUSTMENT_LABELS,
+                    )
+                if "weight_source" in adjusted_display.columns:
+                    adjusted_display["weight_source"] = translated_series(
+                        adjusted_display["weight_source"],
+                        WEIGHT_SOURCE_LABELS,
+                    )
+                adjusted_display = adjusted_display.rename(
+                    columns={
+                        "day_name": "Dzień",
+                        "exercise": "Ćwiczenie",
+                        "model_predicted_weight": "Predykcja modelu",
+                        "final_recommended_weight": "Sugerowany ciężar",
+                        "target_rir": "RIR",
+                        "target_fatigue": "Zmęczenie",
+                        "safety_adjustment": "Korekta",
+                        "weight_source": "Źródło ciężaru",
+                    }
+                )
+                st.dataframe(adjusted_display, use_container_width=True)
 
     st.subheader("Znaczenie reguł")
     for rule_name, description in SAFETY_RULE_DESCRIPTIONS.items():
@@ -983,8 +1059,14 @@ def render_live_generator_tab(dataset_df: pd.DataFrame | None) -> None:
     meta_cols = st.columns(3)
     meta_cols[0].metric("Rekomendowany split", metadata["recommended_split"])
     meta_cols[1].metric("Dni", metadata["day_count"])
-    meta_cols[2].metric("Ćwiczenia", metadata["total_exercises"])
+    meta_cols[2].metric("Pozycje planu", metadata["total_exercises"])
     st.caption(metadata["split_reason"])
+
+    if generator_mode == "Nowy użytkownik z kalibracją siłową":
+        st.info(
+            "Dla nowych użytkowników sugerowane ciężary są kalibrowane na podstawie "
+            "podanych aktualnych ciężarów roboczych."
+        )
 
     render_plan_kpis(plan_df)
     render_plan_day_list(plan_df)
