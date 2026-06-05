@@ -242,7 +242,11 @@ streamlit run app/streamlit_app.py
 ```
 
 Dashboard działa w trybie prezentacyjnym na małych plikach CSV zapisanych w
-`app/demo_assets/`. Generowanie planu na żywo wymaga lokalnego modelu:
+`app/demo_assets/`. Jeżeli lokalnie dostępny jest model z Etapu 2, zakładka
+`Live Generator` może wygenerować demonstracyjny plan treningowy na podstawie
+formularza użytkownika.
+
+Generowanie planu na żywo wymaga lokalnego modelu:
 
 ```text
 models/best_weight_prediction_model.joblib
