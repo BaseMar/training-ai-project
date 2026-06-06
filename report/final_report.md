@@ -427,67 +427,196 @@ Najważniejszy wniosek metodologiczny dotyczy zmiennej `level`. Poziom zaawansow
 
 # 6. Przygotowanie danych do modelowania
 
-TODO: Opisać definicję problemu, target, cechy, feature engineering, split i baseline.
+Rozdział opisuje sposób przygotowania danych w Etapie 2 projektu, realizowanym w skrypcie `scripts/02_modeling_and_recommendation.py`. Celem tego etapu było zbudowanie zbioru modelowego, przygotowanie cech historycznych, wykonanie podziału train/test oraz porównanie kilku modeli regresyjnych przewidujących ciężar treningowy.
 
 ## 6.1. Definicja problemu predykcyjnego
 
-TODO: Zdefiniować zadanie regresji przewidujące sugerowany ciężar.
+Zadanie zostało zdefiniowane jako problem regresyjny. Celem modelu jest przewidywanie wartości `weight`, czyli ciężaru treningowego w kilogramach dla pojedynczej serii ćwiczenia. Predykcja jest wyznaczana na podstawie profilu użytkownika, ćwiczenia, parametrów planowanej serii, fazy treningowej oraz cech historycznych opisujących wcześniejsze wykonania tego samego ćwiczenia przez danego użytkownika.
+
+Model nie stanowi całego systemu rekomendacyjnego. Jest jednym z jego komponentów i wspiera dobór sugerowanego obciążenia. Finalna rekomendacja może być później skorygowana przez historię użytkownika, kalibrację siłową, dane podobnych użytkowników oraz reguły bezpieczeństwa. Takie podejście jest ważne, ponieważ rekomendacja treningowa nie powinna wynikać wyłącznie z wartości przewidzianej przez model.
 
 ## 6.2. Zmienna docelowa
 
-TODO: Opisać `weight` jako target modelu.
+Zmienną docelową jest `weight`, czyli ciężar roboczy użyty w konkretnej serii treningowej. Wybór tej zmiennej wynika z celu projektu: system ma wspierać użytkownika w określeniu obciążenia, które pasuje do ćwiczenia, liczby powtórzeń, poziomu trudności oraz wcześniejszej historii treningowej.
+
+Predykcję `weight` należy interpretować jako sugerowany ciężar w kilogramach. Nie jest to jednak automatyczne zalecenie do bezpośredniego wykonania. W praktycznym systemie wartość przewidziana przez model powinna być traktowana jako punkt wyjścia, który może zostać ograniczony przez reguły bezpieczeństwa, aktualny poziom zmęczenia, RIR oraz kontekst użytkownika.
 
 ## 6.3. Cechy wejściowe
 
-TODO: Wymienić cechy kategoryczne, numeryczne i historyczne użyte w modelowaniu.
+W Etapie 2 wykorzystano 19 cech wejściowych. Można je podzielić na trzy grupy: cechy kategoryczne, cechy numeryczne opisujące bieżącą serię oraz cechy historyczne.
+
+Cechy kategoryczne:
+
+| Cecha | Znaczenie |
+| --- | --- |
+| `exercise` | Nazwa ćwiczenia, dla którego przewidywany jest ciężar. |
+| `level` | Poziom zaawansowania użytkownika. |
+| `split` | Typ splitu treningowego. |
+| `phase` | Aktualna faza treningowa. |
+| `sex` | Kategoria płci syntetycznego użytkownika. |
+
+Cechy numeryczne bieżącej serii:
+
+| Cecha | Znaczenie |
+| --- | --- |
+| `set_number` | Numer serii w ramach ćwiczenia. |
+| `reps` | Planowana lub wykonana liczba powtórzeń. |
+| `fatigue` | Poziom zmęczenia powiązany z serią. |
+| `rir` | Liczba powtórzeń pozostających w zapasie. |
+
+Cechy historyczne obejmują poprzednie wartości oraz średnie kroczące dla użytkownika i ćwiczenia. Są one opisane dokładniej w podrozdziale 6.5. Cechy kategoryczne są kodowane one-hot w pipeline modelującym, a dla Ridge Regression cechy numeryczne są dodatkowo standaryzowane.
 
 ## 6.4. Feature engineering
 
-TODO: Opisać cechy takie jak `volume`, `e1rm_epley`, cechy opóźnione i rolling features.
+Przed modelowaniem wykonano kilka przekształceń danych. Najpierw do zbioru dodano zmienną `volume`, zdefiniowaną jako:
+
+`volume = reps * weight`
+
+Jest to prosta miara pracy wykonanej w serii. Następnie obliczono przybliżone `e1rm_epley` według wzoru:
+
+`e1rm_epley = weight * (1 + reps / 30)`
+
+Wartość `e1rm_epley` służy jako orientacyjny wskaźnik siły i element inspekcji danych, natomiast właściwy model predykcyjny przewiduje bezpośrednio `weight`.
+
+Kolejnym krokiem było posortowanie danych według `user_id`, `exercise`, `date`, `session_id` i `set_number`. Taka kolejność jest potrzebna, aby poprawnie utworzyć cechy historyczne. Dane treningowe mają charakter sekwencyjny, więc poprzednie serie tego samego użytkownika w tym samym ćwiczeniu powinny poprzedzać obserwację, dla której tworzona jest predykcja.
+
+Po utworzeniu cech historycznych usunięto rekordy, dla których brakowało wymaganych wartości wejściowych. Z początkowych 1 215 602 rekordów powstał zbiór model-ready zawierający 1 211 945 rekordów.
 
 ## 6.5. Cechy historyczne
 
-TODO: Wymienić i wyjaśnić cechy poprzednich serii oraz średnie kroczące.
+Cechy historyczne zostały zbudowane osobno dla pary `user_id` i `exercise`. Dzięki temu opisują wcześniejsze wykonania tego samego ćwiczenia przez konkretnego użytkownika, a nie ogólną średnią dla całej populacji.
+
+W Etapie 2 utworzono następujące cechy opóźnione:
+
+| Cecha | Znaczenie |
+| --- | --- |
+| `prev_weight` | Ciężar z poprzedniej serii tego użytkownika w danym ćwiczeniu. |
+| `prev_reps` | Liczba powtórzeń z poprzedniej serii. |
+| `prev_rir` | RIR z poprzedniej serii. |
+| `prev_fatigue` | Zmęczenie z poprzedniej serii. |
+| `prev_volume` | Objętość poprzedniej serii. |
+
+Dodatkowo utworzono średnie kroczące z trzech wcześniejszych obserwacji:
+
+| Cecha | Znaczenie |
+| --- | --- |
+| `rolling_weight_3` | Średni ciężar z trzech poprzednich serii. |
+| `rolling_reps_3` | Średnia liczba powtórzeń z trzech poprzednich serii. |
+| `rolling_rir_3` | Średni RIR z trzech poprzednich serii. |
+| `rolling_fatigue_3` | Średnie zmęczenie z trzech poprzednich serii. |
+| `rolling_volume_3` | Średnia objętość z trzech poprzednich serii. |
+
+Historia jest szczególnie ważna w tym problemie, ponieważ najlepszą informacją o kolejnym ciężarze jest zwykle wcześniejszy ciężar użytkownika w tym samym ćwiczeniu. Cechy historyczne pomagają modelowi uwzględnić indywidualny poziom siły, tempo progresji oraz ostatni kontekst treningowy.
 
 ## 6.6. Podział train/test
 
-TODO: Opisać czasowy podział danych na zbiór treningowy i testowy.
+W skrypcie zastosowano podział czasowy, a nie losowy podział całego zbioru. Datą graniczną jest kwantyl 0.8 kolumny `date` w zbiorze model-ready, czyli `2024-07-05`. Obserwacje z datą mniejszą lub równą tej wartości trafiły do zbioru treningowego, a późniejsze obserwacje do zbioru testowego.
+
+Przed próbkowaniem zbiór treningowy zawierał 970 668 rekordów z okresu od 2022-01-01 do 2024-07-05, a zbiór testowy 241 277 rekordów z okresu od 2024-07-06 do 2024-12-30. Na potrzeby porównania modeli zastosowano próbkowanie: maksymalnie 250 000 rekordów treningowych i 100 000 rekordów testowych.
+
+Taki podział lepiej odzwierciedla realny scenariusz użycia modelu. Model uczy się na wcześniejszych treningach, a następnie przewiduje obciążenia dla późniejszych obserwacji.
 
 ## 6.7. Baseline
 
-TODO: Opisać model bazowy `naive_prev_weight` i jego znaczenie porównawcze.
+Jako punkt odniesienia zastosowano baseline `naive_prev_weight`. Jest to prosta reguła, która jako predykcję przyjmuje poprzedni ciężar użytkownika w tym samym ćwiczeniu, czyli wartość `prev_weight`.
+
+Baseline jest ważny, ponieważ w danych treningowych poprzedni ciężar jest bardzo silnym punktem odniesienia dla kolejnej serii. Model ML ma sens praktyczny tylko wtedy, gdy daje wartość ponad taką prostą regułę. Porównanie z `naive_prev_weight` pozwala więc sprawdzić, czy bardziej złożone modele faktycznie poprawiają jakość predykcji.
 
 # 7. Modelowanie i wybór modelu
 
-TODO: Przedstawić testowane modele, metryki, wyniki i wybór modelu finalnego.
+W Etapie 2 porównano trzy modele uczenia maszynowego oraz baseline oparty na poprzednim ciężarze. Wszystkie modele były oceniane na tym samym zbiorze testowym, z wykorzystaniem metryk regresyjnych oraz praktycznych progów błędu wyrażonych w kilogramach.
 
 ## 7.1. Testowane modele
 
-TODO: Opisać Ridge Regression, Random Forest, HistGradientBoosting i baseline.
+Porównano następujące podejścia:
+
+| Model | Rola w eksperymencie |
+| --- | --- |
+| `naive_prev_weight` | Prosty baseline przewidujący ciężar jako poprzedni ciężar użytkownika w danym ćwiczeniu. |
+| Ridge Regression | Model liniowy z regularyzacją, traktowany jako prosty i interpretowalny punkt odniesienia ML. |
+| Random Forest | Model nieliniowy oparty na wielu drzewach decyzyjnych, dobrze dopasowany do danych tabelarycznych. |
+| HistGradientBoosting | Model boostingowy, który sekwencyjnie buduje drzewa i koryguje błędy poprzednich estymatorów. |
+
+Random Forest został skonfigurowany z 120 drzewami, maksymalną głębokością 16 i minimalną liczbą 3 próbek w liściu. HistGradientBoosting wykorzystywał 250 iteracji, learning rate 0.06 oraz regularyzację L2. Ridge Regression korzystał ze standaryzacji cech numerycznych.
 
 ## 7.2. Metryki oceny
 
-TODO: Wyjaśnić MAE, RMSE, R² oraz trafienia w progach 2.5 kg, 5 kg i 10 kg.
+Do oceny modeli wykorzystano kilka metryk. Główną metryką wyboru modelu było MAE, ponieważ jest najbardziej intuicyjne w tym projekcie: informuje, o ile kilogramów średnio myli się model.
+
+Pozostałe metryki pełnią funkcję uzupełniającą:
+
+| Metryka | Interpretacja |
+| --- | --- |
+| MAE | Średni błąd bezwzględny w kilogramach. |
+| RMSE | Pierwiastek średniego błędu kwadratowego; mocniej karze duże błędy. |
+| R² | Miara dopasowania modelu do danych testowych. |
+| Within 2.5 kg | Odsetek predykcji z błędem nie większym niż 2,5 kg. |
+| Within 5 kg | Odsetek predykcji z błędem nie większym niż 5 kg. |
+| Within 10 kg | Odsetek predykcji z błędem nie większym niż 10 kg. |
+
+Progi 2,5 kg, 5 kg i 10 kg są praktyczne w kontekście treningu siłowego, ponieważ ciężary na siłowni często zmieniają się skokowo, a różnica kilku kilogramów może mieć inne znaczenie dla ćwiczeń akcesoryjnych niż dla dużych ćwiczeń wielostawowych.
 
 ## 7.3. Wyniki porównania modeli
 
-TODO: Dodać tabelę wyników porównującą modele według głównych metryk.
+Tabela przedstawia wyniki zapisane lokalnie w `outputs/stage2_outputs/model_comparison_results.csv`.
+
+| Model | MAE | RMSE | R² | Within 2.5 kg | Within 5 kg | Within 10 kg |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Random Forest | 3.8604 | 7.1335 | 0.9625 | 57.221% | 77.287% | 91.473% |
+| Ridge Regression | 3.8780 | 6.9160 | 0.9648 | 56.354% | 77.344% | 91.601% |
+| HistGradientBoosting | 3.9486 | 7.7548 | 0.9557 | 57.307% | 77.449% | 91.599% |
+| Naive baseline | 4.6917 | 8.5286 | 0.9464 | 51.105% | 71.867% | 88.186% |
+
+Wszystkie modele ML uzyskały niższe MAE niż baseline `naive_prev_weight`, co oznacza poprawę względem prostej reguły opartej na poprzednim ciężarze. Najniższe MAE uzyskał Random Forest. Różnica względem Ridge Regression była jednak niewielka, a Ridge Regression osiągnął minimalnie lepsze RMSE, R² oraz odsetek predykcji w progach 5 kg i 10 kg. HistGradientBoosting również poprawił wynik względem baseline, choć według MAE był słabszy od dwóch pozostałych modeli ML.
 
 ## 7.4. Wybór modelu finalnego
 
-TODO: Uzasadnić wybór modelu finalnego na podstawie wyników.
+Finalnym modelem został Random Forest, ponieważ uzyskał najlepszy wynik według głównej metryki wyboru, czyli MAE. Jego średni błąd bezwzględny wyniósł 3.8604 kg.
+
+Wybór należy interpretować ostrożnie. Random Forest nie był zdecydowanie lepszy od Ridge Regression; różnica MAE wyniosła około 0.018 kg. Decyzja wynikała z przyjętego kryterium wyboru, zgodnie z którym najważniejsze było minimalizowanie średniego błędu w kilogramach.
+
+Wytrenowany model został zapisany lokalnie jako artefakt `models/best_weight_prediction_model.joblib`. Plik `.joblib` nie powinien być przechowywany w zwykłym Git ze względu na rozmiar i charakter artefaktu modelowego. Może zostać odtworzony przez uruchomienie Etapu 2 albo udostępniony osobno.
 
 ## 7.5. Interpretacja wyników
 
-TODO: Zinterpretować błąd w kilogramach, przewagę nad baseline i ograniczenia metryk.
+MAE na poziomie około 3.86 kg oznacza, że przeciętny błąd predykcji Random Forest wynosi mniej niż 4 kg. Jest to wynik łatwy do interpretacji w kontekście treningu siłowego, ponieważ odnosi się bezpośrednio do jednostki obciążenia używanej w praktyce.
+
+W porównaniu z baseline `naive_prev_weight` model poprawił MAE o około 0.8313 kg, czyli o 17.72%. Oznacza to, że model ML wykorzystuje dodatkowe informacje ponad sam poprzedni ciężar. Jednocześnie wynik nie oznacza gotowości do bezpośredniego stosowania rekomendacji w praktyce. Model uczy się wzorców z syntetycznego datasetu, a nie z realnych danych użytkowników.
+
+Warto też pamiętać, że ten sam błąd w kilogramach może mieć różne znaczenie dla różnych ćwiczeń. Błąd 4 kg jest relatywnie większy przy ćwiczeniach akcesoryjnych niż przy ciężkich bojach, takich jak `Squat` czy `Deadlift`. Dlatego predykcja modelu powinna być dalej korygowana przez reguły bezpieczeństwa i kontekst użytkownika.
 
 ## 7.6. Ewaluacja grupowa
 
-TODO: Opisać wyniki dla grup takich jak `level`, `phase`, `sex` i `exercise`.
+W Etapie 2 przeprowadzono również ewaluację grupową najlepszego modelu. Wyniki zostały policzone osobno dla zmiennych `level`, `phase`, `sex` i `exercise`. Celem tej analizy było sprawdzenie, czy model działa podobnie w różnych segmentach danych, czy też w niektórych grupach popełnia większe błędy.
+
+Przykładowe wyniki według `level` pokazują zróżnicowanie jakości predykcji:
+
+| `level` | Rekordy testowe | MAE | Within 5 kg |
+| --- | ---: | ---: | ---: |
+| `intermediate` | 17 117 | 2.6238 | 85.120% |
+| `beginner` | 1 838 | 3.3981 | 77.911% |
+| `advanced` | 81 045 | 4.1321 | 75.618% |
+
+Wyniki według `sex` również różnią się między grupami:
+
+| `sex` | Rekordy testowe | MAE | Within 5 kg |
+| --- | ---: | ---: | ---: |
+| `female` | 24 562 | 1.8773 | 91.694% |
+| `male` | 75 438 | 4.5061 | 72.596% |
+
+Analiza według `phase` wskazała MAE 3.8019 dla `hypertrophy`, 3.8850 dla `strength` oraz 4.2896 dla `deload`. W przekroju ćwiczeń błędy były najmniejsze dla ćwiczeń akcesoryjnych, takich jak `Lateral Raise` (MAE 0.5502), a największe dla ciężkich ćwiczeń dolnej części ciała, np. `Squat` (MAE 8.8879), `Leg Press` (MAE 5.5571) i `Deadlift` (MAE 5.1447).
+
+[Miejsce na tabelę/wykres: ewaluacja modelu według `level`, `phase`, `sex` i `exercise`]
+
+Ewaluacja grupowa pokazuje, że ocena modelu nie powinna ograniczać się do jednej metryki globalnej. Różnice między poziomami, płcią, fazami i ćwiczeniami pomagają wskazać obszary, w których model może wymagać dodatkowych reguł, kalibracji albo większej ostrożności interpretacyjnej.
 
 ## 7.7. Wnioski z modelowania
 
-TODO: Podsumować znaczenie historii użytkownika i rolę modelu jako komponentu systemu.
+Modelowanie potwierdziło, że na podstawie danych treningowych można przewidywać ciężar użyty w serii z błędem możliwym do interpretacji w kilogramach. Wszystkie testowane modele ML poprawiły wynik względem prostego baseline opartego na `prev_weight`, co wskazuje, że dodatkowe cechy opisujące użytkownika, ćwiczenie, fazę i historię treningową wnoszą wartość predykcyjną.
+
+Najlepszy wynik według głównej metryki MAE uzyskał Random Forest, ale przewaga nad Ridge Regression była niewielka. Oznacza to, że w projekcie ważniejsza od samego wyboru jednego algorytmu jest cała procedura przygotowania danych, wykorzystanie cech historycznych i prawidłowa interpretacja wyników.
+
+Historia użytkownika okazała się kluczowa, ponieważ pozwala modelowi odnosić predykcję do rzeczywistego poziomu siły w konkretnym ćwiczeniu. Jednocześnie model powinien być traktowany jako komponent systemu rekomendacyjnego, a nie jako samodzielny trener. Finalna rekomendacja obciążenia wymaga połączenia predykcji ML z historią użytkownika, kalibracją siłową, danymi podobnych użytkowników oraz regułami bezpieczeństwa.
 
 # 8. System rekomendacyjny
 
