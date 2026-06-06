@@ -6,75 +6,223 @@ TODO: Uzupełnić tytuł projektu, autora, kierunek, promotora lub prowadzącego
 
 # Streszczenie
 
-TODO: Krótko opisać cel projektu, syntetyczny zbiór danych, etapy prac, najważniejsze wyniki oraz ograniczenia.
+Celem projektu było zaprojektowanie i zaimplementowanie demonstracyjnego systemu sztucznej inteligencji do analizy danych treningowych oraz generowania spersonalizowanych planów treningowych. Projekt obejmuje pełny proces typowy dla data science: przygotowanie danych, eksploracyjną analizę, feature engineering, modelowanie regresyjne, implementację systemu rekomendacyjnego oraz przygotowanie dashboardu prezentacyjnego.
+
+Ze względu na brak rzeczywistych danych użytkowników wykorzystano syntetyczny zbiór danych wygenerowany specjalnie na potrzeby projektu. Dane opisują treningi na poziomie pojedynczej serii i zawierają informacje potrzebne do analizy obciążeń, zachowania użytkowników oraz parametrów wykonywanych ćwiczeń.
+
+W części modelującej zdefiniowano problem regresyjny polegający na przewidywaniu ciężaru treningowego. Porównano kilka modeli, w tym Ridge Regression, Random Forest, HistGradientBoosting oraz prosty baseline oparty na poprzednim ciężarze. Najlepszy wynik według metryki MAE uzyskał model Random Forest, osiągając średni błąd bezwzględny około 3.86 kg.
+
+Na podstawie przygotowanych danych i modelu zbudowano hybrydowy system rekomendacyjny, który generuje tygodniowe plany treningowe. Rekomendacje uwzględniają profil użytkownika, dostępne dni treningowe, fazę treningową, historię lub dane podobnych użytkowników, predykcję modelu ML oraz reguły bezpieczeństwa. Całość została zaprezentowana w dashboardzie Streamlit, który umożliwia przegląd danych, wyników analizy, informacji o modelu oraz generowanie planu treningowego na żywo.
+
+Projekt potwierdził możliwość zbudowania kompletnego demonstratora systemu AI wspierającego analizę danych treningowych i generowanie planów. Jednocześnie wskazał ograniczenia wynikające z syntetycznego charakteru danych, problemu cold start, potrzeby kalibracji siłowej nowych użytkowników oraz braku walidacji rekomendacji na danych rzeczywistych i przez ekspertów treningowych.
 
 # 1. Wprowadzenie
-
-TODO: Wprowadzić temat projektu i wyjaśnić, dlaczego analiza danych treningowych jest użyteczna.
-
 ## 1.1. Kontekst problemu
 
-TODO: Opisać problem analizy treningu, personalizacji planów i monitorowania postępów.
+Trening siłowy oraz ogólnie rozumiana aktywność fizyczna generują dużą ilość danych, które mogą być wykorzystywane do monitorowania postępów użytkownika, analizy obciążeń treningowych oraz wspomagania decyzji dotyczących dalszego planowania treningu. W praktyce dane takie mogą obejmować między innymi informacje o wykonywanych ćwiczeniach, liczbie serii, liczbie powtórzeń, użytym ciężarze, poziomie zmęczenia, subiektywnej trudności serii oraz historii wcześniejszych treningów.
+
+W tradycyjnym podejściu decyzje dotyczące doboru ćwiczeń, objętości, intensywności oraz progresji podejmowane są przez użytkownika samodzielnie albo przy wsparciu trenera. Wymaga to doświadczenia, umiejętności interpretacji własnych wyników oraz regularnej kontroli historii treningowej. U osób początkujących i średniozaawansowanych może to prowadzić do zbyt szybkiej progresji, braku systematyczności, przypadkowego doboru ćwiczeń albo trudności w ocenie, czy aktualne obciążenie jest adekwatne do poziomu użytkownika.
+
+Z punktu widzenia analizy danych i uczenia maszynowego problem ten można potraktować jako zagadnienie personalizacji. System powinien uwzględniać profil użytkownika, jego poziom zaawansowania, historię treningową, rodzaj ćwiczenia, fazę treningową oraz parametry serii. Rekomendacje treningowe nie powinny jednak wynikać wyłącznie z działania modelu ML. W praktyce muszą być interpretowane w kontekście użytkownika i ograniczane przez reguły bezpieczeństwa.
+
+W niniejszym projekcie zaprojektowano i zaimplementowano system pokazujący, jak takie podejście może działać w praktyce: od przygotowania danych, przez analizę i modelowanie, aż po rekomendację planu treningowego oraz jego prezentację w aplikacji.
 
 ## 1.2. Motywacja projektu
 
-TODO: Uzasadnić praktyczną wartość wykorzystania danych treningowych do wspierania decyzji użytkownika.
+Motywacją do realizacji projektu była chęć połączenia praktycznego problemu z obszaru treningu siłowego z metodami analizy danych i uczenia maszynowego. Dane treningowe mają charakter sekwencyjny i historyczny, ponieważ decyzja dotycząca kolejnej jednostki treningowej powinna wynikać z wcześniejszych wyników użytkownika. Oznacza to, że dane takie dobrze nadają się do eksperymentów z analizą trendów, cechami historycznymi oraz modelami predykcyjnymi.
+
+Drugim istotnym aspektem była możliwość pokazania pełnego procesu projektowego typowego dla projektów data science. Projekt nie ogranicza się do wytrenowania modelu. Obejmuje również przygotowanie danych, interpretację wyników, porównanie modeli, implementację logiki rekomendacyjnej oraz warstwę prezentacyjną. Dzięki temu powstał kompletny demonstrator systemu, a nie jedynie pojedynczy notebook analityczny.
+
+Dodatkową motywacją była analiza ograniczeń systemów rekomendacyjnych w kontekście nowych użytkowników. W projekcie pojawia się problem cold start, ponieważ użytkownik bez historii treningowej nie dostarcza informacji o swoim rzeczywistym poziomie siły. Z tego powodu w systemie przewidziano mechanizm kalibracji siłowej, który zostanie szerzej omówiony w rozdziale dotyczącym rekomendera.
 
 ## 1.3. Cel projektu
 
-TODO: Sformułować główny cel: demonstracyjny system AI do analizy danych treningowych i generowania planów.
+Głównym celem projektu było zaprojektowanie i zaimplementowanie demonstracyjnego systemu sztucznej inteligencji do analizy danych treningowych oraz generowania spersonalizowanych planów.
+
+Cel ten został zrealizowany poprzez wykonanie kilku powiązanych etapów:
+
+1. przygotowanie generatora syntetycznych danych treningowych,
+2. wygenerowanie kanonicznego zbioru danych wykorzystywanego w dalszych etapach,
+3. przeprowadzenie eksploracyjnej analizy danych,
+4. przygotowanie cech wykorzystywanych w modelowaniu,
+5. porównanie modeli regresyjnych przewidujących sugerowany ciężar,
+6. wybór najlepszego modelu według przyjętej metryki jakości,
+7. przygotowanie hybrydowego systemu rekomendacyjnego,
+8. dodanie reguł bezpieczeństwa ograniczających rekomendacje,
+9. przygotowanie demonstratora systemu,
+10. stworzenie dashboardu Streamlit prezentującego działanie całego rozwiązania.
+
+Model uczenia maszynowego jest w tym rozwiązaniu jednym z komponentów systemu, a nie samodzielnym trenerem personalnym. Finalna rekomendacja powstaje dopiero po połączeniu predykcji modelu z historią użytkownika, danymi podobnych użytkowników, kalibracją siłową oraz regułami bezpieczeństwa.
 
 ## 1.4. Zakres projektu
 
-TODO: Wskazać elementy objęte projektem oraz jawnie wymienić ograniczenia zakresu.
+Zakres projektu obejmuje następujące elementy:
+
+* implementację generatora danych syntetycznych,
+* przygotowanie zbioru danych treningowych,
+* eksploracyjną analizę danych,
+* przygotowanie cech historycznych,
+* modelowanie regresyjne,
+* porównanie kilku modeli ML,
+* implementację systemu rekomendacyjnego,
+* przygotowanie scenariuszy demonstracyjnych,
+* implementację dashboardu Streamlit.
+
+Projekt ma charakter demonstracyjny i edukacyjny. Oznacza to, że jego celem jest pokazanie kompletnego procesu analizy danych i budowy systemu AI, a nie dostarczenie gotowej aplikacji produkcyjnej. System nie zastępuje trenera personalnego, fizjoterapeuty ani lekarza. Wygenerowane plany i rekomendacje powinny być traktowane jako przykład działania systemu, a nie jako gotowe zalecenia treningowe do stosowania bez konsultacji eksperckiej.
+
+Projekt nie obejmuje:
+
+* pracy na rzeczywistych danych użytkowników,
+* integracji z aplikacją mobilną,
+* logowania użytkowników,
+* zapisu historii wygenerowanych planów w bazie danych,
+* walidacji rekomendacji przez trenera personalnego,
+* walidacji medycznej,
+* wdrożenia produkcyjnego.
 
 ## 1.5. Struktura raportu
 
-TODO: Krótko zapowiedzieć zawartość kolejnych rozdziałów raportu.
+Raport został podzielony na kilka części odpowiadających kolejnym etapom projektu.
+
+W pierwszych rozdziałach przedstawiono kontekst problemu, motywację, cele projektu oraz ogólną architekturę rozwiązania. Następnie opisano charakterystykę danych, sposób ich wygenerowania oraz strukturę zbioru. Kolejna część raportu dotyczy eksploracyjnej analizy danych, w tym rozkładów zmiennych, struktury użytkowników, ćwiczeń i faz treningowych.
+
+W dalszej części opisano przygotowanie danych do modelowania, zdefiniowanie problemu predykcyjnego, utworzenie cech historycznych oraz wybór metryk oceny. Następnie przedstawiono porównanie modeli regresyjnych i wybór modelu finalnego. Kolejne rozdziały opisują system rekomendacyjny, sposób generowania planów, reguły bezpieczeństwa oraz problem cold start.
+
+Ostatnie części raportu dotyczą demonstratora systemu, dashboardu Streamlit, ograniczeń projektu, możliwych kierunków rozwoju oraz końcowych wniosków.
 
 # 2. Cele projektu
-
-TODO: Opisać cele biznesowe, techniczne i pytania projektowe.
-
 ## 2.1. Cel biznesowy
+Celem biznesowym projektu było przygotowanie systemu wspierającego analizę danych treningowych oraz generowanie planów dopasowanych do profilu użytkownika. W praktycznym ujęciu taki system może pomagać w lepszym zrozumieniu historii treningowej, monitorowaniu postępów oraz podejmowaniu decyzji dotyczących kolejnych jednostek treningowych.
 
-TODO: Wyjaśnić praktyczną wartość systemu dla użytkownika i prezentacji wyników.
+System ma wspierać odpowiedzi na pytania takie jak:
+
+* jakie ćwiczenia powinny znaleźć się w planie treningowym,
+* jaki split treningowy jest odpowiedni dla liczby dostępnych dni,
+* jak dobrać liczbę serii i powtórzeń,
+* jak uwzględnić fazę treningową,
+* jak interpretować poziom zmęczenia i RIR,
+* kiedy ograniczyć progresję,
+* jak wykorzystać historię użytkownika do personalizacji planu.
+
+Z perspektywy użytkownika końcowego najważniejszym efektem projektu jest plan przedstawiony w czytelnej formie w dashboardzie. Zawiera on podział na dni treningowe, listę ćwiczeń, liczbę serii, liczbę powtórzeń, docelowy RIR, poziom zmęczenia oraz sugerowane obciążenie, jeżeli możliwe jest jego wiarygodne oszacowanie.
+
+Z perspektywy osoby oceniającej projekt istotne jest również to, że system pokazuje pełny proces analityczny: od danych, przez analizę i modelowanie, aż po końcowy demonstrator.
 
 ## 2.2. Cel naukowy i techniczny
 
-TODO: Opisać predykcję obciążeń, porównanie modeli, cechy historyczne i rekomender.
+Celem naukowym i technicznym projektu było sprawdzenie, w jaki sposób metody analizy danych i uczenia maszynowego mogą zostać wykorzystane do wspomagania decyzji treningowych.
 
-## 2.3. Pytania badawcze / projektowe
+W projekcie zdefiniowano problem regresyjny polegający na przewidywaniu ciężaru użytego w serii treningowej. Zmienną docelową modelu jest weight, natomiast cechami wejściowymi są między innymi informacje o ćwiczeniu, poziomie użytkownika, fazie treningowej, liczbie powtórzeń, RIR, zmęczeniu oraz cechy historyczne, takie jak poprzedni ciężar i średnie kroczące z ostatnich treningów.
 
-TODO: Wypisać pytania dotyczące predykcji ciężaru, wyboru modelu, reguł bezpieczeństwa, cold start i dashboardu.
+W ramach projektu porównano kilka podejść modelujących:
+
+* prosty baseline oparty na poprzednim ciężarze,
+* model liniowy Ridge Regression,
+* Random Forest,
+* HistGradientBoosting.
+
+Jako główną metrykę wyboru modelu przyjęto MAE, ponieważ jest ona łatwa do interpretacji w kontekście treningu siłowego. MAE informuje, o ile kilogramów średnio myli się model przy przewidywaniu ciężaru. Najlepszy wynik uzyskał Random Forest, który został wykorzystany jako komponent wspierający rekomendację obciążenia.
+
+Celem technicznym było również zaprojektowanie hybrydowego systemu rekomendacyjnego. System ten nie opiera się wyłącznie na predykcji modelu ML, lecz łączy kilka źródeł informacji:
+
+* profil użytkownika,
+* historię użytkownika,
+* dane podobnych użytkowników,
+* model regresyjny,
+* kalibrację siłową dla nowych użytkowników,
+* reguły bezpieczeństwa.
+
+W tej części projektu kluczowe były pytania o to, jak dobrze można przewidywać ciężar treningowy na podstawie danych historycznych, który model sprawdza się najlepiej według przyjętej metryki, jak połączyć predykcję z regułami bezpieczeństwa oraz jak obsłużyć użytkowników bez historii treningowej. Ważnym pytaniem było także to, czy wyniki można przedstawić w sposób zrozumiały w dashboardzie.
+
+Takie podejście jest bardziej praktyczne niż użycie samego modelu, ponieważ rekomendacje treningowe muszą uwzględniać ograniczenia związane z bezpieczeństwem, zmęczeniem, poziomem użytkownika i brakiem historii treningowej.
 
 # 3. Architektura systemu
-
-TODO: Przedstawić ogólny przepływ danych i rolę głównych komponentów.
-
 ## 3.1. Ogólna architektura rozwiązania
 
-TODO: Opisać pipeline od generatora danych do dashboardu Streamlit.
+Projekt został zaprojektowany jako wieloetapowy pipeline obejmujący generowanie danych, analizę, modelowanie, rekomendację oraz wizualizację wyników. Przepływ systemu można przedstawić następująco:
+
+Generator danych → Dataset → EDA → Feature Engineering → Model ML → Rekomender → Reguły bezpieczeństwa → Dashboard Streamlit
+
+Każdy etap pełni osobną rolę, ale jednocześnie przekazuje wyniki do kolejnych komponentów. Generator przygotowuje dane syntetyczne, EDA pozwala zrozumieć ich strukturę, a feature engineering przekształca je do postaci użytecznej dla modelowania. Model ML przewiduje sugerowany ciężar, natomiast rekomender łączy tę predykcję z informacjami o użytkowniku i regułami bezpieczeństwa. Ostatnim elementem jest dashboard, który prezentuje działanie systemu w formie interaktywnej aplikacji.
 
 ## 3.2. Etapy przetwarzania danych
 
-TODO: Opisać etapy: EDA, modelowanie i rekomender, demonstrator oraz dashboard.
+Projekt został podzielony na cztery główne etapy.
+
+Pierwszy etap obejmuje eksploracyjną analizę danych. Jego celem jest sprawdzenie jakości zbioru, poznanie rozkładów zmiennych oraz analiza ćwiczeń, poziomów zaawansowania, splitów i faz treningowych.
+
+Drugi etap obejmuje przygotowanie danych do modelowania oraz budowę modeli ML. Utworzono w nim cechy historyczne, przygotowano zbiór modelowy, wykonano czasowy podział train/test, porównano kilka modeli regresyjnych oraz wybrano model finalny według metryki MAE.
+
+Trzeci etap obejmuje demonstrator systemu end-to-end. Skrypt demonstracyjny nie trenuje modeli od nowa, lecz korzysta z modelu przygotowanego w etapie drugim. Dla kilku scenariuszy użytkowników generowane są przykładowe plany treningowe oraz tabela porównawcza.
+
+Czwarty etap obejmuje dashboard Streamlit. Dashboard stanowi warstwę prezentacyjną projektu i integruje wyniki poprzednich etapów. Pozwala zaprezentować dataset, wyniki EDA, informacje o modelu, scenariusze rekomendacyjne, reguły bezpieczeństwa oraz generator planu działający na żywo.
 
 ## 3.3. Rola generatora danych
 
-TODO: Wyjaśnić, jak generator tworzy syntetyczne dane treningowe.
+Generator danych pełni rolę źródła syntetycznego zbioru treningowego. Został wykorzystany dlatego, że projekt nie bazuje na rzeczywistych danych użytkowników. Dane syntetyczne pozwalają kontrolować strukturę datasetu oraz uwzględnić wielu użytkowników, różne poziomy zaawansowania, splity, fazy treningowe i ćwiczenia.
+
+Dane generowane są na poziomie pojedynczej serii treningowej. Oznacza to, że jeden rekord odpowiada jednej serii konkretnego ćwiczenia wykonanej przez określonego użytkownika w ramach danej sesji treningowej. Taka granularność danych umożliwia analizę zarówno pojedynczych serii, jak i agregację do poziomu sesji, użytkownika lub ćwiczenia.
+
+Generator uwzględnia między innymi:
+
+* użytkowników,
+* sesje treningowe,
+* daty treningów,
+* ćwiczenia,
+* liczbę serii,
+* liczbę powtórzeń,
+* ciężar,
+* poziom zmęczenia,
+* RIR,
+* poziom zaawansowania,
+* split treningowy,
+* fazę treningową,
+* płeć.
+
+W projekcie dataset wygenerowany przez generator jest traktowany jako kanoniczny zbiór wejściowy dla EDA, modelowania i demonstratora.
 
 ## 3.4. Rola modelu ML
 
-TODO: Opisać model regresyjny jako komponent predykcji sugerowanego ciężaru.
+Model uczenia maszynowego pełni funkcję komponentu wspierającego dobór sugerowanego obciążenia treningowego. Problem został zdefiniowany jako regresja, w której zmienną docelową jest weight, czyli ciężar użyty w serii.
+
+Model nie jest jednak jedynym źródłem decyzji. W praktyce treningowej samo przewidywanie wartości liczbowej nie wystarcza, ponieważ rekomendacja musi być oceniona w kontekście historii użytkownika, fazy treningowej, zmęczenia, RIR oraz zasad bezpieczeństwa.
+
+W projekcie model ML odpowiada za wyznaczenie wartości model_predicted_weight. Następnie wartość ta może zostać skorygowana przez system rekomendacyjny. W zależności od sytuacji finalny ciężar może pochodzić z historii użytkownika, kalibracji siłowej, predykcji modelu lub wartości orientacyjnej z danych.
 
 ## 3.5. Rola systemu rekomendacyjnego
 
-TODO: Opisać, jak rekomender łączy profil użytkownika, historię, podobnych użytkowników, model ML i reguły bezpieczeństwa.
+System rekomendacyjny jest warstwą łączącą dane, model ML oraz reguły eksperckie. Jego zadaniem jest wygenerowanie planu treningowego dla użytkownika na podstawie informacji przygotowanych we wcześniejszych etapach.
+
+Rekomender wykonuje kilka kroków:
+
+1. analizuje profil użytkownika,
+2. dobiera split treningowy na podstawie liczby dni treningowych,
+3. wybiera ćwiczenia na podstawie splitu i danych podobnych użytkowników,
+4. dobiera liczbę serii, powtórzeń, RIR i poziom zmęczenia,
+5. wykorzystuje model ML do predykcji sugerowanego ciężaru,
+6. sprawdza historię użytkownika lub kalibrację siłową,
+7. stosuje reguły bezpieczeństwa,
+8. zwraca finalny plan treningowy.
+
+System ma charakter hybrydowy. Oznacza to, że nie jest wyłącznie modelem ML ani prostym zestawem reguł. Łączy podejście data-driven z informacją o użytkowniku i ograniczeniami bezpieczeństwa.
 
 ## 3.6. Rola dashboardu
 
-TODO: Opisać dashboard jako warstwę prezentacyjną i demonstracyjną.
+Dashboard Streamlit pełni rolę końcowej warstwy prezentacyjnej projektu. Jego celem jest pokazanie działania rozwiązania w formie interaktywnej aplikacji.
+
+Dashboard zawiera kilka zakładek:
+
+* Overview,
+* Dataset,
+* EDA,
+* ML Model,
+* Recommendation Demo,
+* Safety Rules,
+* Live Generator.
+
+Dzięki temu możliwe jest przejście od ogólnego opisu projektu, przez analizę danych i modelowanie, aż do wygenerowanego planu treningowego. Dashboard pozwala również pokazać różnicę między użytkownikiem z historią treningową a nowym użytkownikiem, dla którego potrzebna jest kalibracja siłowa.
+
+Warstwa dashboardu jest istotna z punktu widzenia prezentacji projektu, ponieważ pozwala pokazać rezultat nie tylko jako kod i tabele, ale jako działający demonstrator systemu AI.
 
 # 4. Charakterystyka danych
 
