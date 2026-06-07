@@ -1231,6 +1231,10 @@ Zakładka Overview przedstawia tytuł projektu, główny pipeline oraz cztery et
 
 Zakładka zawiera również KPI datasetu: liczbę rekordów, użytkowników, sesji i ćwiczeń. Jej rolą jest szybkie wprowadzenie odbiorcy w strukturę projektu i pokazanie, jak kolejne etapy łączą się w jeden system.
 
+![Zrzut ekranu: Dashboard - Overview](images/dashboard_overview.png)
+
+Zrzut ekranu pokazuje główny pipeline projektu oraz podstawowe KPI datasetu, dlatego dobrze pełni funkcję wizualnego wprowadzenia do dashboardu.
+
 ## 10.4. Zakładka Dataset
 
 Zakładka Dataset prezentuje dane wejściowe projektu. Pokazuje statystyki globalne, takie jak liczba użytkowników, sesji, ćwiczeń, poziomów, splitów i faz. Zawiera także zakres dat oraz podgląd pierwszych rekordów i typów kolumn.
@@ -1238,6 +1242,10 @@ Zakładka Dataset prezentuje dane wejściowe projektu. Pokazuje statystyki globa
 Ważną funkcją tej zakładki jest analiza wybranego użytkownika. Dashboard umożliwia filtrowanie po `level`, `sex` i `user_id`. Dla wybranej grupy pokazuje liczbę rekordów, użytkowników, sesji, ćwiczeń, średni i maksymalny ciężar. Dla konkretnego użytkownika prezentuje liczbę rekordów, sesji, ćwiczeń, średni RIR, średnie `fatigue` oraz sumę `volume`.
 
 Zakładka pozwala również porównać użytkownika z całym datasetem, zobaczyć top ćwiczeń, trend miesięcznego `volume` oraz ranking siłowy użytkowników w wybranej grupie. Jest to szczególnie przydatne do pokazania, że użytkownicy `advanced male` mogą istotnie różnić się realnymi wynikami siłowymi.
+
+![Zrzut ekranu: Dashboard - analiza wybranego użytkownika](images/dashboard_dataset_user_analysis_2.png)
+
+Zrzut ekranu pokazuje podsumowanie grupy `advanced male` oraz profil wybranego użytkownika, co wspiera wniosek o dużym zróżnicowaniu użytkowników w tej samej kategorii `level`.
 
 ## 10.5. Zakładka EDA
 
@@ -1253,15 +1261,19 @@ Zakładka wczytuje metryki z `app/demo_assets/model_comparison_results.csv` albo
 
 Jeżeli lokalnie istnieją pliki ewaluacji grupowej, dashboard pokazuje także wyniki według `level`, `phase`, `sex` i `exercise`.
 
-[Miejsce na zrzut ekranu: Dashboard - zakładka ML Model]
+![Zrzut ekranu: Dashboard - ML Model](images/dashboard_ml_model.png)
 
-Lokalnie nie znaleziono zrzutu ekranu tej zakładki. Po uruchomieniu dashboardu można w tym miejscu dodać obraz prezentujący metryki modelu.
+Zrzut ekranu pokazuje dostępność modelu lokalnego, najważniejsze metryki oraz porównanie modeli według MAE i trafień w zakresie 5 kg.
 
 ## 10.7. Zakładka Recommendation Demo
 
 Zakładka Recommendation Demo korzysta z plików w `app/demo_assets/`. Wczytuje `scenario_comparison.csv` oraz plany `plan_*.csv`. Użytkownik może wybrać scenariusz demonstracyjny i zobaczyć KPI planu: liczbę dni, liczbę pozycji planu, liczbę unikalnych ćwiczeń, średni sugerowany ciężar, średni RIR, liczbę pozycji z historią oraz liczbę korekt bezpieczeństwa.
 
 Plan jest prezentowany jako lista dni treningowych, np. Day 1 - Push, Day 2 - Pull i Day 3 - Legs. Dodatkowo dashboard udostępnia uproszczoną tabelę planu oraz pełną tabelę techniczną w expanderze. Dzięki temu można pokazać zarówno czytelny widok dla użytkownika, jak i szczegóły implementacyjne.
+
+![Zrzut ekranu: Dashboard - przykładowy plan treningowy](images/dashboard_recommendation_demo_2.png)
+
+Zrzut ekranu pokazuje plan jako listę ćwiczeń w dniu treningowym, czyli najbardziej czytelną formę prezentacji rezultatu rekomendera.
 
 ## 10.8. Zakładka Safety Rules
 
@@ -1282,9 +1294,9 @@ W trybie użytkownika z historią wybierany jest `user_id` z datasetu, a system 
 
 Formularz profilu obejmuje wiek, płeć, poziom, fazę treningową i liczbę dni treningowych. Formularz kalibracji pozwala podać ciężary robocze dla głównych ćwiczeń. Po wygenerowaniu planu dashboard pokazuje rekomendowany split, KPI planu, listę dni treningowych, uproszczoną tabelę, pełną tabelę techniczną oraz przycisk pobrania planu jako CSV.
 
-[Miejsce na zrzut ekranu: Dashboard - Live Generator]
+![Zrzut ekranu: Dashboard - Live Generator](images/dashboard_live_generator.png)
 
-Lokalnie nie znaleziono zrzutu ekranu Live Generatora. Po uruchomieniu aplikacji można tu wstawić widok formularza z wygenerowanym planem.
+Zrzut ekranu pokazuje tryb nowego użytkownika z kalibracją siłową oraz początek wygenerowanego planu, dlatego dobrze ilustruje obsługę problemu cold start.
 
 Najważniejsze elementy implementacji znajdują się w `app/streamlit_app.py`. Aplikacja najpierw sprawdza obecność lokalnego modelu, a następnie ładuje go przez `joblib`.
 
