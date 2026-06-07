@@ -145,6 +145,12 @@ Generator danych → Dataset → EDA → Feature Engineering → Model ML → Re
 
 Każdy etap pełni osobną rolę, ale jednocześnie przekazuje wyniki do kolejnych komponentów. Generator przygotowuje dane syntetyczne, EDA pozwala zrozumieć ich strukturę, a feature engineering przekształca je do postaci użytecznej dla modelowania. Model ML przewiduje sugerowany ciężar, natomiast rekomender łączy tę predykcję z informacjami o użytkowniku i regułami bezpieczeństwa. Ostatnim elementem jest dashboard, który prezentuje działanie systemu w formie interaktywnej aplikacji.
 
+[Miejsce na obraz: architektura systemu]
+
+Lokalnie nie znaleziono gotowego obrazu architektury systemu. W tym miejscu można później wstawić schemat pipeline przedstawiający przepływ od generatora do dashboardu.
+
+W repozytorium poszczególne elementy pipeline są rozdzielone między kilka katalogów. `generator/` odpowiada za przygotowanie syntetycznego datasetu, `data/` przechowuje kanoniczny plik `FINAL_ENGINE_V4.csv`, `scripts/` zawiera skrypty EDA, modelowania i demonstratora, `src/` przechowuje logikę rekomendacyjną używaną przez dashboard, a `app/` zawiera aplikację Streamlit oraz małe pliki demonstracyjne w `app/demo_assets/`. Katalogi `models/` i `outputs/` służą do lokalnych artefaktów modelu oraz wyników skryptów i nie są traktowane jako główna treść raportu.
+
 ## 3.2. Etapy przetwarzania danych
 
 Projekt został podzielony na cztery główne etapy.
@@ -183,11 +189,11 @@ W projekcie dataset wygenerowany przez generator jest traktowany jako kanoniczny
 
 ## 3.4. Rola modelu ML
 
-Model uczenia maszynowego pełni funkcję komponentu wspierającego dobór sugerowanego obciążenia treningowego. Problem został zdefiniowany jako regresja, w której zmienną docelową jest weight, czyli ciężar użyty w serii.
+Model uczenia maszynowego pełni funkcję komponentu wspierającego dobór sugerowanego obciążenia treningowego. Problem został zdefiniowany jako regresja, w której zmienną docelową jest `weight`, czyli ciężar użyty w serii.
 
 Model nie jest jednak jedynym źródłem decyzji. W praktyce treningowej samo przewidywanie wartości liczbowej nie wystarcza, ponieważ rekomendacja musi być oceniona w kontekście historii użytkownika, fazy treningowej, zmęczenia, RIR oraz zasad bezpieczeństwa.
 
-W projekcie model ML odpowiada za wyznaczenie wartości model_predicted_weight. Następnie wartość ta może zostać skorygowana przez system rekomendacyjny. W zależności od sytuacji finalny ciężar może pochodzić z historii użytkownika, kalibracji siłowej, predykcji modelu lub wartości orientacyjnej z danych.
+W projekcie model ML odpowiada za wyznaczenie wartości `model_predicted_weight`. Następnie wartość ta jest interpretowana przez system rekomendacyjny. W aktualnej implementacji finalny ciężar `final_recommended_weight` pochodzi przede wszystkim z historii użytkownika, kalibracji siłowej albo wartości orientacyjnej z danych podobnych użytkowników, a predykcja modelu pozostaje ważnym komponentem wspierającym tę logikę.
 
 ## 3.5. Rola systemu rekomendacyjnego
 
@@ -235,6 +241,61 @@ Dane wykorzystane w projekcie są syntetyczne i zostały wygenerowane przez gene
 Zastosowanie danych syntetycznych wynikało z kilku powodów. Po pierwsze, w projekcie nie były dostępne rzeczywiste dzienniki treningowe użytkowników. Po drugie, użycie danych syntetycznych eliminuje problemy związane z prywatnością i przetwarzaniem danych osobowych. Po trzecie, generator pozwala kontrolować strukturę zbioru, liczbę użytkowników, zakres dat, poziomy zaawansowania, splity treningowe, fazy treningowe oraz listę ćwiczeń.
 
 Takie podejście umożliwiło przeprowadzenie pełnego procesu data science: od przygotowania danych, przez EDA i feature engineering, aż po modelowanie oraz rekomendację planów treningowych. Należy jednak pamiętać, że realizm danych zależy od założeń generatora, dlatego wyniki modelowania i rekomendacji wymagają ostrożnej interpretacji.
+
+Poniższy fragment z pliku `generator/config.py` pokazuje najważniejsze parametry symulacji. Konfiguracja określa liczbę użytkowników, długość okresu, zakresy wartości oraz ścieżkę zapisu datasetu.
+
+```python
+@dataclass(frozen=True)
+class SimConfig:
+    """Runtime settings shared by all generator components."""
+
+    users: int = 100
+    years: int = 3
+    start_date: datetime = field(default_factory=lambda: datetime(2022, 1, 1))
+
+    fatigue_decay: float = 0.96
+    fatigue_cap: float = 2.0
+    level_up_ratio: float = 1.35
+    level_down_ratio: float = 0.80
+
+    weight_clip: tuple[float, float] = (2.5, 300.0)
+    reps_clip: tuple[int, int] = (1, 25)
+    output_path: str = "data/FINAL_ENGINE_V4.csv"
+```
+
+Właściwe generowanie rekordów odbywa się w `generator/generator.py`. Skrypt iteruje po użytkownikach i dniach symulacji, a zapis do CSV następuje dopiero po zbudowaniu ramki danych.
+
+```python
+def _generate_records(self) -> Iterator[dict]:
+    session_id = 1
+    total_days = self.cfg.years * 365
+
+    for user_id in range(self.cfg.users):
+        lifter = Lifter(user_id, self.cfg)
+
+        for day_offset in range(total_days):
+            if np.random.rand() > lifter.profile.compliance:
+                continue
+
+            session_date = self.cfg.start_date + timedelta(days=day_offset)
+            session = WorkoutSession(
+                lifter=lifter,
+                session_id=session_id,
+                day_index=day_offset,
+                day_of_year=day_offset % 365,
+                session_date=session_date,
+                cfg=self.cfg,
+            )
+            yield from session.run()
+            session_id += 1
+
+def _save(self, df: pd.DataFrame) -> None:
+    output_path = Path(self.cfg.output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+```
+
+Ten fragment jest istotny, ponieważ pokazuje, że dataset powstaje z symulowanych sesji treningowych, a nie z ręcznie przygotowanej tabeli.
 
 ## 4.2. Struktura zbioru danych
 
@@ -314,6 +375,37 @@ Następnie przeanalizowano rozkłady zmiennych kategorycznych, takich jak `level
 
 EDA służyła również przygotowaniu danych do modelowania. W skrypcie `scripts/01_eda.py` tworzona jest zmienna `volume = reps * weight`, agregacje na poziomie sesji oraz cechy historyczne używane później w modelowaniu, takie jak poprzedni ciężar i średnie kroczące.
 
+Fragment z `scripts/01_eda.py` pokazuje kontrakt danych wejściowych oraz sposób zapisywania wykresów do lokalnego katalogu wyników.
+
+```python
+DATA_PATH = "data/FINAL_ENGINE_V4.csv"
+OUTPUT_DIR = "outputs/eda_outputs"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+def save_plot(filename):
+    path = os.path.join(OUTPUT_DIR, filename)
+    plt.tight_layout()
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.show()
+
+df = pd.read_csv(DATA_PATH)
+
+required_columns = [
+    "user_id", "session_id", "date",
+    "exercise", "set_number", "reps", "weight",
+    "fatigue", "rir", "level", "split", "phase", "sex"
+]
+
+missing_required_columns = [col for col in required_columns if col not in df.columns]
+if missing_required_columns:
+    print("Missing required columns:")
+    print(missing_required_columns)
+else:
+    print("All required columns are present.")
+```
+
+Dzięki temu EDA pełni nie tylko funkcję opisową, ale również kontrolną: sprawdza, czy dataset zachowuje strukturę wymaganą przez kolejne etapy projektu.
+
 ## 5.2. Podstawowe statystyki datasetu
 
 Dataset zawiera 1 215 602 rekordy opisujące 61 951 sesji treningowych wykonanych przez 100 syntetycznych użytkowników. W danych występuje 15 unikalnych ćwiczeń, a zakres dat obejmuje okres od 2022-01-01 do 2024-12-30.
@@ -334,7 +426,9 @@ Rozkład zmiennej `level` nie jest równomierny. Najwięcej rekordów należy do
 
 Taki rozkład oznacza, że modele uczone na pełnym zbiorze mogą silniej dopasowywać się do wzorców użytkowników zaawansowanych. Jednocześnie obecność trzech poziomów pozwala porównywać objętość, obciążenia i strukturę treningu między grupami.
 
-[Miejsce na wykres: rozkład poziomów zaawansowania]
+![Wykres: rozkład poziomów zaawansowania](images/eda_level_distribution.png)
+
+Wykres potwierdza przewagę rekordów użytkowników `advanced`, co należy uwzględniać przy interpretacji wyników modelowania.
 
 ## 5.4. Rozkład splitów treningowych
 
@@ -348,7 +442,9 @@ W danych występują trzy rodzaje splitów treningowych: `ppl`, `fbw` i `upper_l
 
 Zróżnicowanie splitów jest ważne dla rekomendera, ponieważ sposób podziału treningu wpływa na dobór ćwiczeń, liczbę jednostek treningowych i strukturę tygodniowego planu. Obecność trzech splitów pozwala analizować zarówno plany całego ciała, jak i bardziej dzielone schematy treningowe.
 
-[Miejsce na wykres: rozkład splitów treningowych]
+![Wykres: rozkład splitów treningowych](images/eda_split_distribution.png)
+
+Rozkład splitów pokazuje, że dataset zawiera wszystkie schematy używane później przez rekomender, przy największym udziale splitu `ppl`.
 
 ## 5.5. Rozkład faz treningowych
 
@@ -362,7 +458,9 @@ Zmienna `phase` opisuje fazę treningową, w której znajduje się użytkownik. 
 
 Faza `hypertrophy` odpowiada treningowi nastawionemu na większą objętość i zwykle wyższy zakres powtórzeń. Faza `strength` koncentruje się na pracy z większą intensywnością i niższą liczbą powtórzeń. Faza `deload` reprezentuje lżejszy okres treningowy, którego celem jest obniżenie obciążenia i zmęczenia. Niewielki udział `deload` jest zgodny z jego funkcją jako krótkiego okresu przejściowego.
 
-[Miejsce na wykres: rozkład faz treningowych]
+![Wykres: rozkład faz treningowych](images/eda_phase_distribution.png)
+
+Wykres pokazuje dominację fazy `hypertrophy` oraz mniejszy udział fazy `deload`, co jest zgodne z jej krótszym charakterem treningowym.
 
 ## 5.6. Analiza ćwiczeń
 
@@ -383,7 +481,9 @@ W zbiorze występuje 15 ćwiczeń obejmujących główne wzorce ruchowe: przysia
 
 Lista ćwiczeń jest zróżnicowana i obejmuje zarówno ćwiczenia wielostawowe, jak i akcesoryjne. Dzięki temu dataset nadaje się do budowy planów treningowych obejmujących główne partie mięśniowe i różne typy jednostek treningowych.
 
-[Miejsce na wykres: top 10 ćwiczeń według liczby serii]
+![Wykres: top 10 ćwiczeń według liczby serii](images/eda_top_exercises.png)
+
+Najczęściej występujące ćwiczenia obejmują zarówno główne ruchy wielostawowe, jak i ćwiczenia akcesoryjne, co wspiera budowę zróżnicowanych planów.
 
 ## 5.7. Analiza objętości treningowej
 
@@ -397,7 +497,9 @@ W aktualnym zbiorze średnia objętość pojedynczej serii wynosi 181,72, median
 
 Trend miesięczny pokazuje wzrost całkowitej objętości w czasie. Najniższą miesięczną objętość odnotowano w lutym 2022 r. i wyniosła ona 2 593 065,53. Najwyższa wartość wystąpiła w grudniu 2024 r. i wyniosła 9 258 839,83. Taki trend jest spójny z założeniem generatora, w którym użytkownicy trenują przez dłuższy okres i mogą stopniowo zwiększać możliwości treningowe.
 
-[Miejsce na wykres: miesięczny trend objętości treningowej]
+![Wykres: dzienny trend objętości treningowej](images/eda_daily_volume_trend.png)
+
+Wykres pokazuje wzrost objętości w czasie oraz wygładzone średnie kroczące, co ułatwia interpretację trendu generowanego przez dane syntetyczne.
 
 ## 5.8. Analiza użytkowników
 
@@ -482,6 +584,34 @@ Kolejnym krokiem było posortowanie danych według `user_id`, `exercise`, `date`
 
 Po utworzeniu cech historycznych usunięto rekordy, dla których brakowało wymaganych wartości wejściowych. Z początkowych 1 215 602 rekordów powstał zbiór model-ready zawierający 1 211 945 rekordów.
 
+Najważniejszy fragment implementacji znajduje się w `scripts/02_modeling_and_recommendation.py`. Kod tworzy `volume`, `e1rm_epley`, sortuje dane w czasie i buduje cechy opóźnione oraz średnie kroczące.
+
+```python
+df["volume"] = df["reps"] * df["weight"]
+df["e1rm_epley"] = df["weight"] * (1 + df["reps"] / 30)
+
+df = (
+    df
+    .sort_values(["user_id", "exercise", "date", "session_id", "set_number"])
+    .reset_index(drop=True)
+)
+
+df["prev_weight"] = df.groupby(["user_id", "exercise"])["weight"].shift(1)
+df["prev_reps"] = df.groupby(["user_id", "exercise"])["reps"].shift(1)
+df["prev_rir"] = df.groupby(["user_id", "exercise"])["rir"].shift(1)
+df["prev_fatigue"] = df.groupby(["user_id", "exercise"])["fatigue"].shift(1)
+df["prev_volume"] = df.groupby(["user_id", "exercise"])["volume"].shift(1)
+
+for col in ["weight", "reps", "rir", "fatigue", "volume"]:
+    df[f"rolling_{col}_3"] = (
+        df
+        .groupby(["user_id", "exercise"])[col]
+        .transform(lambda x: x.shift(1).rolling(3).mean())
+    )
+```
+
+Zastosowanie `shift(1)` jest ważne, ponieważ zabezpiecza przed użyciem informacji z bieżącej serii przy tworzeniu predykcji dla tej samej obserwacji.
+
 ## 6.5. Cechy historyczne
 
 Cechy historyczne zostały zbudowane osobno dla pary `user_id` i `exercise`. Dzięki temu opisują wcześniejsze wykonania tego samego ćwiczenia przez konkretnego użytkownika, a nie ogólną średnią dla całej populacji.
@@ -516,6 +646,30 @@ Przed próbkowaniem zbiór treningowy zawierał 970 668 rekordów z okresu od 20
 
 Taki podział lepiej odzwierciedla realny scenariusz użycia modelu. Model uczy się na wcześniejszych treningach, a następnie przewiduje obciążenia dla późniejszych obserwacji.
 
+W implementacji podział czasowy został wykonany na podstawie kwantyla 0.8 kolumny `date`.
+
+```python
+cutoff_date = model_ready["date"].quantile(0.8)
+train_df = model_ready[model_ready["date"] <= cutoff_date].copy()
+test_df = model_ready[model_ready["date"] > cutoff_date].copy()
+
+train_df_sample = train_df.sample(
+    min(len(train_df), MAX_TRAIN_SAMPLE),
+    random_state=RANDOM_STATE,
+)
+test_df_sample = test_df.sample(
+    min(len(test_df), MAX_TEST_SAMPLE),
+    random_state=RANDOM_STATE,
+)
+
+X_train = train_df_sample[FEATURES]
+y_train = train_df_sample[TARGET]
+X_test = test_df_sample[FEATURES]
+y_test = test_df_sample[TARGET]
+```
+
+Próbkowanie ogranicza czas eksperymentów, ale zachowuje zasadę trenowania na wcześniejszych obserwacjach i testowania na późniejszych.
+
 ## 6.7. Baseline
 
 Jako punkt odniesienia zastosowano baseline `naive_prev_weight`. Jest to prosta reguła, która jako predykcję przyjmuje poprzedni ciężar użytkownika w tym samym ćwiczeniu, czyli wartość `prev_weight`.
@@ -539,6 +693,48 @@ Porównano następujące podejścia:
 
 Random Forest został skonfigurowany z 120 drzewami, maksymalną głębokością 16 i minimalną liczbą 3 próbek w liściu. HistGradientBoosting wykorzystywał 250 iteracji, learning rate 0.06 oraz regularyzację L2. Ridge Regression korzystał ze standaryzacji cech numerycznych.
 
+Fragment z `scripts/02_modeling_and_recommendation.py` pokazuje wspólny pipeline preprocessingowy i porównywane modele. Cechy kategoryczne są kodowane przez `ColumnTransformer`, a każdy model jest opakowany w `Pipeline`.
+
+```python
+def build_preprocessor(scale_numeric=False):
+    numeric_transformer = StandardScaler() if scale_numeric else "passthrough"
+    return ColumnTransformer(
+        transformers=[
+            ("cat", make_one_hot_encoder(), categorical_features),
+            ("num", numeric_transformer, numeric_features),
+        ]
+    )
+
+models = {
+    "ridge_regression": Pipeline([
+        ("preprocessor", build_preprocessor(scale_numeric=True)),
+        ("model", Ridge(alpha=1.0)),
+    ]),
+    "random_forest": Pipeline([
+        ("preprocessor", build_preprocessor(scale_numeric=False)),
+        ("model", RandomForestRegressor(
+            n_estimators=120,
+            max_depth=16,
+            min_samples_leaf=3,
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        )),
+    ]),
+    "hist_gradient_boosting": Pipeline([
+        ("preprocessor", build_preprocessor(scale_numeric=False)),
+        ("model", HistGradientBoostingRegressor(
+            max_iter=250,
+            learning_rate=0.06,
+            max_leaf_nodes=31,
+            l2_regularization=0.1,
+            random_state=RANDOM_STATE,
+        )),
+    ]),
+}
+```
+
+Taki układ ułatwia porównanie modeli, ponieważ każdy z nich otrzymuje ten sam zestaw cech i ten sam sposób przygotowania danych.
+
 ## 7.2. Metryki oceny
 
 Do oceny modeli wykorzystano kilka metryk. Główną metryką wyboru modelu było MAE, ponieważ jest najbardziej intuicyjne w tym projekcie: informuje, o ile kilogramów średnio myli się model.
@@ -556,6 +752,27 @@ Pozostałe metryki pełnią funkcję uzupełniającą:
 
 Progi 2,5 kg, 5 kg i 10 kg są praktyczne w kontekście treningu siłowego, ponieważ ciężary na siłowni często zmieniają się skokowo, a różnica kilku kilogramów może mieć inne znaczenie dla ćwiczeń akcesoryjnych niż dla dużych ćwiczeń wielostawowych.
 
+Metryki były liczone jedną funkcją, aby uniknąć różnic w sposobie oceny poszczególnych modeli.
+
+```python
+def calculate_regression_metrics(model_name, y_true, y_pred):
+    y_pred = np.maximum(np.asarray(y_pred), 0)
+    y_true = np.asarray(y_true)
+    abs_error = np.abs(y_true - y_pred)
+
+    return {
+        "model": model_name,
+        "MAE": mean_absolute_error(y_true, y_pred),
+        "RMSE": np.sqrt(mean_squared_error(y_true, y_pred)),
+        "R2": r2_score(y_true, y_pred),
+        "within_2_5kg_percent": np.mean(abs_error <= 2.5) * 100,
+        "within_5kg_percent": np.mean(abs_error <= 5.0) * 100,
+        "within_10kg_percent": np.mean(abs_error <= 10.0) * 100,
+    }
+```
+
+Funkcja zwraca zarówno klasyczne metryki regresyjne, jak i progi błędu łatwe do zinterpretowania w kilogramach.
+
 ## 7.3. Wyniki porównania modeli
 
 Tabela przedstawia wyniki zapisane lokalnie w `outputs/stage2_outputs/model_comparison_results.csv`.
@@ -569,6 +786,14 @@ Tabela przedstawia wyniki zapisane lokalnie w `outputs/stage2_outputs/model_comp
 
 Wszystkie modele ML uzyskały niższe MAE niż baseline `naive_prev_weight`, co oznacza poprawę względem prostej reguły opartej na poprzednim ciężarze. Najniższe MAE uzyskał Random Forest. Różnica względem Ridge Regression była jednak niewielka, a Ridge Regression osiągnął minimalnie lepsze RMSE, R² oraz odsetek predykcji w progach 5 kg i 10 kg. HistGradientBoosting również poprawił wynik względem baseline, choć według MAE był słabszy od dwóch pozostałych modeli ML.
 
+![Wykres: porównanie modeli według MAE](images/model_mae_comparison.png)
+
+Wykres MAE pokazuje niewielkie różnice między modelami ML oraz wyraźną poprawę względem baseline `naive_prev_weight`.
+
+![Wykres: udział predykcji w zakresie 5 kg](images/model_within_5kg_comparison.png)
+
+Wykres within 5 kg uzupełnia MAE o praktyczną interpretację: pokazuje, jak często błąd mieści się w zakresie możliwym do odczytania jako tolerancja kilku kilogramów.
+
 ## 7.4. Wybór modelu finalnego
 
 Finalnym modelem został Random Forest, ponieważ uzyskał najlepszy wynik według głównej metryki wyboru, czyli MAE. Jego średni błąd bezwzględny wyniósł 3.8604 kg.
@@ -576,6 +801,24 @@ Finalnym modelem został Random Forest, ponieważ uzyskał najlepszy wynik wedł
 Wybór należy interpretować ostrożnie. Random Forest nie był zdecydowanie lepszy od Ridge Regression; różnica MAE wyniosła około 0.018 kg. Decyzja wynikała z przyjętego kryterium wyboru, zgodnie z którym najważniejsze było minimalizowanie średniego błędu w kilogramach.
 
 Wytrenowany model został zapisany lokalnie jako artefakt `models/best_weight_prediction_model.joblib`. Plik `.joblib` nie powinien być przechowywany w zwykłym Git ze względu na rozmiar i charakter artefaktu modelowego. Może zostać odtworzony przez uruchomienie Etapu 2 albo udostępniony osobno.
+
+Wybór i zapis modelu są realizowane po posortowaniu wyników według MAE. Fragment poniżej pokazuje, że baseline służy do porównania, ale finalny artefakt jest wybierany spośród modeli ML.
+
+```python
+results_df = pd.DataFrame(all_results).sort_values("MAE")
+results_df.to_csv(
+    os.path.join(OUTPUT_DIR, "model_comparison_results.csv"),
+    index=False,
+)
+
+ml_results_df = results_df[results_df["model"] != "naive_prev_weight"].copy()
+best_model_name = ml_results_df.iloc[0]["model"]
+best_pipeline = trained_models[best_model_name]
+
+joblib.dump(best_pipeline, MODEL_FILENAME)
+```
+
+Ten zapis pozwala później używać modelu w demonstratorze i dashboardzie bez ponownego trenowania.
 
 ## 7.5. Interpretacja wyników
 
@@ -606,7 +849,13 @@ Wyniki według `sex` również różnią się między grupami:
 
 Analiza według `phase` wskazała MAE 3.8019 dla `hypertrophy`, 3.8850 dla `strength` oraz 4.2896 dla `deload`. W przekroju ćwiczeń błędy były najmniejsze dla ćwiczeń akcesoryjnych, takich jak `Lateral Raise` (MAE 0.5502), a największe dla ciężkich ćwiczeń dolnej części ciała, np. `Squat` (MAE 8.8879), `Leg Press` (MAE 5.5571) i `Deadlift` (MAE 5.1447).
 
-[Miejsce na tabelę/wykres: ewaluacja modelu według `level`, `phase`, `sex` i `exercise`]
+[Miejsce na wykres: ewaluacja modelu według `level`, `phase`, `sex` i `exercise`]
+
+W lokalnych wynikach nie znaleziono osobnego obrazu ewaluacji grupowej. Wyniki segmentowe pozostają więc opisane tabelarycznie, a dodatkowy obraz może zostać uzupełniony po wygenerowaniu takiego wykresu.
+
+![Wykres: najważniejsze cechy modelu](images/model_feature_importance_top20.png)
+
+Wykres ważności cech wspiera interpretację modelu Random Forest. Pokazuje, które zmienne miały największy wpływ na predykcję `weight`, choć nie zastępuje pełnej analizy przyczynowej.
 
 Ewaluacja grupowa pokazuje, że ocena modelu nie powinna ograniczać się do jednej metryki globalnej. Różnice między poziomami, płcią, fazami i ćwiczeniami pomagają wskazać obszary, w których model może wymagać dodatkowych reguł, kalibracji albo większej ostrożności interpretacyjnej.
 
@@ -651,6 +900,21 @@ Dobór splitu zależy od liczby dni treningowych w tygodniu. Implementacja stosu
 | 5 lub więcej | `ppl` |
 
 Reguła ta pozwala szybko dopasować strukturę planu do dostępności użytkownika. `fbw` jest stosowany przy mniejszej liczbie dni, ponieważ trening całego ciała lepiej wykorzystuje ograniczoną liczbę jednostek. `ppl` sprawdza się przy trzech lub większej liczbie dni, a `upper_lower` jest wybierany dla czterech dni treningowych.
+
+W `src/recommendation_engine.py` dobór splitu jest zaimplementowany jako prosta reguła decyzyjna.
+
+```python
+def choose_recommended_split(days_per_week: int) -> tuple[str, str]:
+    if days_per_week <= 2:
+        return "fbw", "Selected FBW because the profile has at most 2 training days."
+    if days_per_week == 3:
+        return "ppl", "Selected PPL because the profile has 3 training days."
+    if days_per_week == 4:
+        return "upper_lower", "Selected upper/lower because the profile has 4 training days."
+    return "ppl", "Selected PPL because the profile has 5 or more training days."
+```
+
+Reguła jest celowo czytelna, ponieważ w projekcie pełni funkcję demonstracyjną i ma być łatwa do interpretacji w dashboardzie.
 
 ## 8.3. Dobór ćwiczeń
 
@@ -718,6 +982,27 @@ Kalibracja jest wykorzystywana jako źródło finalnego ciężaru `strength_cali
 
 Wartości kalibracyjne są dodatkowo modyfikowane przez fazę treningową: `strength` używa pełniejszego punktu odniesienia, `hypertrophy` obniża ciężar przez współczynnik 0,88, a `deload` przez 0,7. Dzięki temu kalibracja częściowo rozwiązuje problem cold start, a model ML pozostaje komponentem wspierającym, a nie jedynym źródłem obciążenia.
 
+Poniższy fragment z `src/recommendation_engine.py` pokazuje współczynniki faz oraz mapowanie ćwiczeń na ćwiczenia kalibracyjne.
+
+```python
+PHASE_WEIGHT_FACTORS = {
+    "strength": 1.0,
+    "hypertrophy": 0.88,
+    "deload": 0.7,
+}
+
+CALIBRATION_ANCHORS = {
+    "Bench Press": [("Bench Press", 1.0)],
+    "Incline Bench Press": [("Bench Press", 0.8)],
+    "Lateral Raise": [("Shoulder Press", 0.25)],
+    "Lat Pulldown": [("Lat Pulldown", 1.0), ("Barbell Row", 0.75)],
+    "Leg Press": [("Leg Press", 1.0), ("Squat", 1.2)],
+    # ... pominięto mniej istotny fragment ...
+}
+```
+
+Kalibracja nie zastępuje modelu, ale daje systemowi bezpieczniejszy punkt odniesienia dla nowych użytkowników bez historii.
+
 ## 8.9. Źródła finalnego ciężaru
 
 Finalny ciężar może pochodzić z kilku źródeł, zależnie od dostępności historii i kalibracji. W aktualnej implementacji model zawsze generuje `model_predicted_weight`, ale `weight_source` dla finalnej rekomendacji przyjmuje przede wszystkim wartości opisujące źródło praktycznego punktu odniesienia:
@@ -729,6 +1014,51 @@ Finalny ciężar może pochodzić z kilku źródeł, zależnie od dostępności 
 | `fallback_median` | Wartość orientacyjna oparta na medianach z danych podobnych użytkowników lub całego datasetu. |
 
 Predykcja modelu jest więc punktem odniesienia dla logiki rekomendacyjnej i reguł bezpieczeństwa, ale finalny ciężar jest ustalany priorytetowo: najpierw na podstawie historii użytkownika, następnie kalibracji siłowej, a w razie ich braku przez fallback z danych podobnych użytkowników.
+
+Najważniejszy fragment `generate_training_plan()` w `src/recommendation_engine.py` pokazuje ten priorytet bezpośrednio w kodzie.
+
+```python
+predicted_weight = float(model.predict(model_input)[0])
+calibrated_weight, calibration_reference = get_calibrated_weight(
+    exercise,
+    normalized_calibration,
+    profile["phase"],
+)
+
+if history["history_available"]:
+    final_weight, safety_adjustment = apply_safety_rules(
+        predicted_weight,
+        history,
+        profile,
+    )
+    weight_source = "user_history"
+elif calibrated_weight is not None and calibration_reference is not None:
+    safety_history = history.copy()
+    safety_history["prev_weight"] = calibration_reference
+    safety_history["rolling_weight_3"] = calibration_reference
+    final_weight, safety_adjustment = apply_safety_rules(
+        calibrated_weight,
+        safety_history,
+        profile,
+    )
+    weight_source = "strength_calibration"
+else:
+    final_weight, safety_adjustment = apply_safety_rules(
+        predicted_weight,
+        history,
+        profile,
+    )
+    weight_source = "fallback_median"
+
+plan_rows.append({
+    "model_predicted_weight": round(predicted_weight, 2),
+    "final_recommended_weight": final_weight,
+    "weight_source": weight_source,
+    "safety_adjustment": safety_adjustment,
+})
+```
+
+Kod pokazuje, że `model_predicted_weight` jest zawsze zapisywany, ale `weight_source` opisuje źródło finalnego punktu odniesienia: `user_history`, `strength_calibration` albo `fallback_median`.
 
 ## 8.10. Wnioski dotyczące rekomendera
 
@@ -747,6 +1077,29 @@ Demonstrator korzysta z modelu przygotowanego w Etapie 2, ładowanego z `models/
 profil użytkownika -> model ML -> rekomender -> reguły bezpieczeństwa -> plan treningowy
 
 Skrypt `scripts/03_system_demo.py` generuje plany dla kilku scenariuszy użytkowników i zapisuje je w `outputs/stage3_outputs/`. Małe pliki demonstracyjne zostały też przygotowane w `app/demo_assets/`, aby dashboard mógł działać w trybie prezentacyjnym.
+
+Poniższy fragment z `scripts/03_system_demo.py` pokazuje, że Etap 3 korzysta z gotowego modelu i nie wykonuje ponownego trenowania.
+
+```python
+def load_inputs(data_path, model_path):
+    """Load the canonical dataset and the trained Stage 2 model."""
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Dataset not found: {data_path}")
+
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Model not found: {model_path}\n"
+            "Stage 3 is a demo and does not train models.\n"
+            "First run: python scripts/02_modeling_and_recommendation.py\n"
+            f"Place the file at: {model_path}"
+        )
+
+    data = pd.read_csv(data_path)
+    model = joblib.load(model_path)
+    return data, model
+```
+
+Taka separacja etapów pozwala traktować demonstrator jako sprawdzenie przepływu end-to-end, a nie jako kolejny eksperyment modelowy.
 
 ## 9.2. Scenariusze demonstracyjne
 
@@ -774,7 +1127,7 @@ Plik `scenario_comparison.csv` zawiera zbiorcze porównanie scenariuszy. Uwzglę
 | `older_beginner_hypertrophy` | 2 | `fbw` | 12 | 25,83 kg | 2,0 | nie |
 | `existing_user_with_history` | 3 | `ppl` | 15 | 35,17 kg | 2,0 | tak |
 
-[Miejsce na tabelę: porównanie scenariuszy demonstracyjnych]
+Tabela pełni rolę porównania scenariuszy demonstracyjnych; lokalnie nie znaleziono osobnego obrazu z tym zestawieniem.
 
 ## 9.4. Przykładowe plany treningowe
 
@@ -788,6 +1141,31 @@ Scenariusz `existing_user_with_history` pokazuje personalizację z wykorzystanie
 | Day 3 - Legs | `Deadlift` | 5 | 4 | 2 | 6 | 102,5 kg | `limited_by_high_fatigue_or_low_rir` |
 
 Scenariusz `advanced_male_deload` pokazuje działanie fazy deload. Plan ma 3 dni, 15 pozycji i średni RIR równy 4. We wszystkich pozycjach zastosowano korektę `deload_reduction`, co oznacza, że finalne obciążenia zostały obniżone zgodnie z celem tygodnia odciążającego.
+
+W `scripts/03_system_demo.py` generowanie planu sprowadza się do przejścia po zdefiniowanych scenariuszach, wywołania `generate_training_plan()` oraz zapisania wyników do plików CSV.
+
+```python
+summary_rows = []
+
+for profile in scenarios:
+    plan_df, metadata = generate_training_plan(
+        profile=profile,
+        model=model,
+        data=data,
+        user_id=profile.get("user_id"),
+    )
+
+    scenario_name = profile["name"]
+    plan_path = os.path.join(OUTPUT_DIR, f"plan_{scenario_name}.csv")
+    plan_df.to_csv(plan_path, index=False)
+
+    summary_rows.append(build_scenario_summary_row(profile, plan_df, metadata))
+
+comparison_df = pd.DataFrame(summary_rows)
+comparison_df.to_csv(os.path.join(OUTPUT_DIR, "scenario_comparison.csv"), index=False)
+```
+
+Ten fragment pokazuje, w jaki sposób scenariusze demonstracyjne są zamieniane na gotowe plany oraz zbiorczą tabelę porównawczą.
 
 ## 9.5. Reguły bezpieczeństwa w demonstratorze
 
@@ -865,6 +1243,10 @@ Zakładka wczytuje metryki z `app/demo_assets/model_comparison_results.csv` albo
 
 Jeżeli lokalnie istnieją pliki ewaluacji grupowej, dashboard pokazuje także wyniki według `level`, `phase`, `sex` i `exercise`.
 
+[Miejsce na zrzut ekranu: Dashboard - zakładka ML Model]
+
+Lokalnie nie znaleziono zrzutu ekranu tej zakładki. Po uruchomieniu dashboardu można w tym miejscu dodać obraz prezentujący metryki modelu.
+
 ## 10.7. Zakładka Recommendation Demo
 
 Zakładka Recommendation Demo korzysta z plików w `app/demo_assets/`. Wczytuje `scenario_comparison.csv` oraz plany `plan_*.csv`. Użytkownik może wybrać scenariusz demonstracyjny i zobaczyć KPI planu: liczbę dni, liczbę pozycji planu, liczbę unikalnych ćwiczeń, średni sugerowany ciężar, średni RIR, liczbę pozycji z historią oraz liczbę korekt bezpieczeństwa.
@@ -891,6 +1273,56 @@ W trybie użytkownika z historią wybierany jest `user_id` z datasetu, a system 
 Formularz profilu obejmuje wiek, płeć, poziom, fazę treningową i liczbę dni treningowych. Formularz kalibracji pozwala podać ciężary robocze dla głównych ćwiczeń. Po wygenerowaniu planu dashboard pokazuje rekomendowany split, KPI planu, listę dni treningowych, uproszczoną tabelę, pełną tabelę techniczną oraz przycisk pobrania planu jako CSV.
 
 [Miejsce na zrzut ekranu: Dashboard - Live Generator]
+
+Lokalnie nie znaleziono zrzutu ekranu Live Generatora. Po uruchomieniu aplikacji można tu wstawić widok formularza z wygenerowanym planem.
+
+Najważniejsze elementy implementacji znajdują się w `app/streamlit_app.py`. Aplikacja najpierw sprawdza obecność lokalnego modelu, a następnie ładuje go przez `joblib`.
+
+```python
+MODEL_PATH = BASE_DIR / "models" / "best_weight_prediction_model.joblib"
+DEMO_ASSETS_DIR = BASE_DIR / "app" / "demo_assets"
+
+@st.cache_resource
+def load_local_model() -> Any | None:
+    if not MODEL_PATH.exists():
+        return None
+    return joblib.load(MODEL_PATH)
+```
+
+Live Generator rozdziela dwa scenariusze użycia: użytkownika z historią danych oraz nowego użytkownika z kalibracją siłową.
+
+```python
+generator_mode = st.radio(
+    "Tryb generowania",
+    [
+        "Użytkownik z historią danych",
+        "Nowy użytkownik z kalibracją siłową",
+    ],
+    horizontal=True,
+)
+
+with st.form("live_generator_form"):
+    # ... pominięto mniej istotny fragment formularza ...
+    strength_calibration = render_strength_calibration_inputs(level)
+    submitted = st.form_submit_button("Generuj plan")
+
+plan_df, metadata = generate_training_plan(
+    profile=profile,
+    model=model,
+    data=add_exercise_categories(dataset_df),
+    user_id=user_id,
+    strength_calibration=strength_calibration,
+)
+
+st.download_button(
+    "Pobierz plan CSV",
+    data=plan_df.to_csv(index=False).encode("utf-8"),
+    file_name="live_training_plan.csv",
+    mime="text/csv",
+)
+```
+
+Kod pokazuje, że dashboard jest warstwą prezentacyjną nad przygotowaną wcześniej logiką rekomendacyjną, a nie osobnym miejscem trenowania modelu.
 
 ## 10.10. Wnioski z dashboardu
 
@@ -1045,53 +1477,3 @@ Projekt spełnił cel jako demonstracyjny system AI do analizy danych treningowy
 7. Ricci, F., Rokach, L., Shapira, B. (red.). (2011). *Recommender Systems Handbook*. Springer.
 8. Helms, E. R., Cronin, J., Storey, A., Zourdos, M. C. (2016). Application of the Repetitions in Reserve-Based Rating of Perceived Exertion Scale for Resistance Training. *Strength and Conditioning Journal*, 38(4), 42-49.
 9. American College of Sports Medicine. (2009). Progression Models in Resistance Training for Healthy Adults. *Medicine & Science in Sports & Exercise*, 41(3), 687-708.
-
-# Załączniki
-
-Załączniki wskazują najważniejsze elementy repozytorium i materiały pomocnicze, które wspierają raport główny.
-
-## Załącznik A. Struktura repozytorium
-
-Najważniejsze katalogi repozytorium:
-
-| Katalog | Rola |
-| --- | --- |
-| `data/` | Kanoniczny dataset projektu, w tym `FINAL_ENGINE_V4.csv`. |
-| `scripts/` | Skrypty etapów projektu: EDA, modelowanie i demonstrator. |
-| `src/` | Kod pomocniczy, w tym logika rekomendacyjna używana przez dashboard. |
-| `app/` | Aplikacja Streamlit prezentująca wyniki projektu. |
-| `app/demo_assets/` | Małe pliki CSV używane przez dashboard w trybie prezentacyjnym. |
-| `models/` | Lokalizacja artefaktu modelu `.joblib`, generowanego poza zwykłym commitem. |
-| `outputs/` | Lokalne wyniki skryptów, wykresy i tabele pomocnicze; nie są commitowane jako część raportu. |
-| `report/` | Plik raportu końcowego. |
-
-## Załącznik B. Najważniejsze skrypty
-
-Najważniejsze skrypty i moduły:
-
-| Plik | Opis |
-| --- | --- |
-| `scripts/01_eda.py` | Realizuje eksploracyjną analizę danych, tworzy wykresy, tabele pomocnicze, agregacje i pierwsze cechy analityczne. |
-| `scripts/02_modeling_and_recommendation.py` | Przygotowuje dane modelowe, tworzy cechy historyczne, porównuje modele regresyjne, zapisuje najlepszy model i buduje prototyp rekomendera. |
-| `scripts/03_system_demo.py` | Ładuje model z Etapu 2 i generuje demonstracyjne plany treningowe dla kilku scenariuszy użytkowników. |
-| `app/streamlit_app.py` | Definiuje dashboard Streamlit, zakładki prezentacyjne i Live Generator. |
-| `src/recommendation_engine.py` | Zawiera logikę rekomendacyjną używaną przez dashboard, w tym dobór splitu, ćwiczeń, parametry serii, kalibrację i reguły bezpieczeństwa. |
-
-## Załącznik C. Przykładowy wygenerowany plan
-
-Przykładowe plany treningowe są generowane w Etapie 3 i przechowywane jako pliki `plan_*.csv` w `app/demo_assets/`. Raport omawia wybrane fragmenty planów w rozdziale 9, natomiast pełne tabele można podejrzeć w dashboardzie w zakładce Recommendation Demo.
-
-[Miejsce na fragment przykładowego planu wygenerowanego przez system]
-
-## Załącznik D. Wybrane metryki modelu
-
-Skrócona tabela wyników modeli:
-
-| Model | MAE | RMSE | R² | Within 5 kg |
-| --- | ---: | ---: | ---: | ---: |
-| Random Forest | 3.8604 | 7.1335 | 0.9625 | 77.287% |
-| Ridge Regression | 3.8780 | 6.9160 | 0.9648 | 77.344% |
-| HistGradientBoosting | 3.9486 | 7.7548 | 0.9557 | 77.449% |
-| Naive baseline | 4.6917 | 8.5286 | 0.9464 | 71.867% |
-
-Pełniejsza interpretacja wyników znajduje się w rozdziale 7.
