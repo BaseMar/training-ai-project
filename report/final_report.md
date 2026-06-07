@@ -2,7 +2,17 @@
 
 ## Strona tytułowa
 
-TODO: Uzupełnić tytuł projektu, autora, kierunek, promotora lub prowadzącego, uczelnię oraz rok akademicki.
+**Tytuł pracy:** Projekt i implementacja systemu sztucznej inteligencji do analizy danych treningowych
+
+**Autor:** Martino Sebastiani
+
+**Kierunek / studia:** [uzupełnić]
+
+**Promotor / prowadzący:** [uzupełnić]
+
+**Uczelnia:** [uzupełnić]
+
+**Rok akademicki:** [uzupełnić]
 
 # Streszczenie
 
@@ -112,7 +122,7 @@ Z perspektywy osoby oceniającej projekt istotne jest również to, że system p
 
 Celem naukowym i technicznym projektu było sprawdzenie, w jaki sposób metody analizy danych i uczenia maszynowego mogą zostać wykorzystane do wspomagania decyzji treningowych.
 
-W projekcie zdefiniowano problem regresyjny polegający na przewidywaniu ciężaru użytego w serii treningowej. Zmienną docelową modelu jest weight, natomiast cechami wejściowymi są między innymi informacje o ćwiczeniu, poziomie użytkownika, fazie treningowej, liczbie powtórzeń, RIR, zmęczeniu oraz cechy historyczne, takie jak poprzedni ciężar i średnie kroczące z ostatnich treningów.
+W projekcie zdefiniowano problem regresyjny polegający na przewidywaniu ciężaru użytego w serii treningowej. Zmienną docelową modelu jest `weight`, natomiast cechami wejściowymi są między innymi informacje o ćwiczeniu, poziomie użytkownika (`level`), fazie treningowej (`phase`), liczbie powtórzeń, RIR, zmęczeniu oraz cechy historyczne, takie jak `prev_weight` i `rolling_weight_3`.
 
 W ramach projektu porównano kilka podejść modelujących:
 
@@ -373,7 +383,7 @@ Celem EDA było poznanie struktury datasetu przed etapem modelowania. W pierwsze
 
 Następnie przeanalizowano rozkłady zmiennych kategorycznych, takich jak `level`, `split`, `phase`, `sex` i `exercise`. Ważnym elementem była także analiza zmiennych numerycznych: `reps`, `weight`, `fatigue`, `rir` oraz `set_number`.
 
-EDA służyła również przygotowaniu danych do modelowania. W skrypcie `scripts/01_eda.py` tworzona jest zmienna `volume = reps * weight`, agregacje na poziomie sesji oraz cechy historyczne używane później w modelowaniu, takie jak poprzedni ciężar i średnie kroczące.
+EDA służyła również przygotowaniu danych do dalszych etapów projektu. W skrypcie `scripts/01_eda.py` tworzona jest zmienna `volume = reps * weight` oraz agregacje analityczne na poziomie sesji. Właściwe cechy historyczne wykorzystywane w modelowaniu, takie jak `prev_weight` i `rolling_weight_3`, są tworzone w Etapie 2, czyli w `scripts/02_modeling_and_recommendation.py`.
 
 Fragment z `scripts/01_eda.py` pokazuje kontrakt danych wejściowych oraz sposób zapisywania wykresów do lokalnego katalogu wyników.
 
@@ -1225,9 +1235,9 @@ Zakładka zawiera również KPI datasetu: liczbę rekordów, użytkowników, ses
 
 Zakładka Dataset prezentuje dane wejściowe projektu. Pokazuje statystyki globalne, takie jak liczba użytkowników, sesji, ćwiczeń, poziomów, splitów i faz. Zawiera także zakres dat oraz podgląd pierwszych rekordów i typów kolumn.
 
-Ważną funkcją tej zakładki jest analiza wybranego użytkownika. Dashboard umożliwia filtrowanie po `level`, `sex` i `user_id`. Dla wybranej grupy pokazuje liczbę rekordów, użytkowników, sesji, ćwiczeń, średni i maksymalny ciężar. Dla konkretnego użytkownika prezentuje liczbę rekordów, sesji, ćwiczeń, średni RIR, średnie fatigue oraz sumę `volume`.
+Ważną funkcją tej zakładki jest analiza wybranego użytkownika. Dashboard umożliwia filtrowanie po `level`, `sex` i `user_id`. Dla wybranej grupy pokazuje liczbę rekordów, użytkowników, sesji, ćwiczeń, średni i maksymalny ciężar. Dla konkretnego użytkownika prezentuje liczbę rekordów, sesji, ćwiczeń, średni RIR, średnie `fatigue` oraz sumę `volume`.
 
-Zakładka pozwala również porównać użytkownika z całym datasetem, zobaczyć top ćwiczeń, trend miesięcznego volume oraz ranking siłowy użytkowników w wybranej grupie. Jest to szczególnie przydatne do pokazania, że użytkownicy `advanced male` mogą istotnie różnić się realnymi wynikami siłowymi.
+Zakładka pozwala również porównać użytkownika z całym datasetem, zobaczyć top ćwiczeń, trend miesięcznego `volume` oraz ranking siłowy użytkowników w wybranej grupie. Jest to szczególnie przydatne do pokazania, że użytkownicy `advanced male` mogą istotnie różnić się realnymi wynikami siłowymi.
 
 ## 10.5. Zakładka EDA
 
