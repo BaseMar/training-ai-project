@@ -495,7 +495,39 @@ Lista ćwiczeń jest zróżnicowana i obejmuje zarówno ćwiczenia wielostawowe,
 
 Najczęściej występujące ćwiczenia obejmują zarówno główne ruchy wielostawowe, jak i ćwiczenia akcesoryjne, co wspiera budowę zróżnicowanych planów.
 
-## 5.7. Analiza objętości treningowej
+## 5.7. Rozkłady zmiennych numerycznych
+
+Klasycznym elementem EDA jest analiza rozkładów zmiennych numerycznych. W tym projekcie szczególnie ważne są `reps`, `weight`, `fatigue` i `rir`, ponieważ opisują wykonanie pojedynczej serii oraz poziom trudności treningu. Dodatkowo zmienna `volume` jest używana później jako cecha pochodna, łącząca ciężar i liczbę powtórzeń.
+
+![Wykres: rozkład liczby powtórzeń](images/eda_reps_histogram.png)
+
+Histogram `reps` pokazuje typowe zakresy powtórzeń występujące w danych. Jest to istotne przed modelowaniem, ponieważ liczba powtórzeń bezpośrednio wpływa na interpretację ciężaru: ten sam `weight` może oznaczać inną intensywność przy 3 powtórzeniach niż przy 12 powtórzeniach.
+
+![Wykres: rozkład ciężaru](images/eda_weight_histogram.png)
+
+Histogram `weight` pokazuje rozkład obciążeń oraz wartości skrajne. W danych występuje szeroki zakres ciężarów, co jest zgodne z obecnością różnych ćwiczeń i poziomów użytkowników, ale wymaga ostrożnej interpretacji błędu modelu w kilogramach.
+
+![Wykres: rozkład zmęczenia](images/eda_fatigue_histogram.png)
+
+Histogram `fatigue` pozwala ocenić, jakie poziomy zmęczenia dominują w zbiorze. Zmienna ta jest ważna dla rekomendera, ponieważ wysoki poziom zmęczenia powinien ograniczać zbyt agresywną progresję.
+
+![Wykres: rozkład RIR](images/eda_rir_histogram.png)
+
+Histogram `rir` pokazuje zapas powtórzeń, czyli praktyczną miarę intensywności serii. Rozkład tej zmiennej pomaga ocenić, czy dane obejmują zarówno serie bliżej granicy możliwości, jak i serie wykonywane z większym zapasem.
+
+Analiza rozkładów numerycznych jest potrzebna przed modelowaniem, ponieważ pozwala sprawdzić zakresy wartości, potencjalne skupienia obserwacji oraz zmienne, które mogą wpływać na błąd predykcji. Wartości te należy interpretować jako wynik działania generatora danych syntetycznych, a nie jako bezpośredni opis zachowań realnych użytkowników.
+
+## 5.8. Macierz korelacji zmiennych numerycznych
+
+Macierz korelacji służy do sprawdzenia zależności liniowych między zmiennymi numerycznymi. W analizie uwzględniono `set_number`, `reps`, `weight`, `fatigue`, `rir`, `volume` oraz `e1rm_epley`.
+
+![Wykres: macierz korelacji zmiennych numerycznych](images/eda_correlation_matrix.png)
+
+Najsilniejsza zależność występuje między `weight` i `e1rm_epley`, co jest zgodne z definicją `e1rm_epley`, ponieważ ta cecha jest obliczana bezpośrednio na podstawie ciężaru i liczby powtórzeń. Silna jest także korelacja między `volume` i `e1rm_epley` oraz między `weight` i `volume`. W przypadku `volume` zależności te również wynikają częściowo z definicji matematycznej, ponieważ `volume = reps * weight`.
+
+Widoczna ujemna korelacja między `reps` i `weight` jest zgodna z intuicją treningową: serie z większym obciążeniem zwykle mają mniejszą liczbę powtórzeń. Korelacje zmiennych takich jak `fatigue`, `rir` i `set_number` są słabsze, co sugeruje, że ich wpływ na predykcję może być bardziej kontekstowy i nieliniowy. Korelacja nie oznacza przyczynowości, dlatego macierz pomaga zrozumieć strukturę danych, ale nie zastępuje późniejszego modelowania.
+
+## 5.9. Analiza objętości treningowej
 
 W analizie EDA utworzono zmienną `volume`, zdefiniowaną jako iloczyn liczby powtórzeń i ciężaru:
 
@@ -511,7 +543,7 @@ Trend miesięczny pokazuje wzrost całkowitej objętości w czasie. Najniższą 
 
 Wykres pokazuje wzrost objętości w czasie oraz wygładzone średnie kroczące, co ułatwia interpretację trendu generowanego przez dane syntetyczne.
 
-## 5.8. Analiza użytkowników
+## 5.10. Analiza użytkowników
 
 Dataset pozwala analizować użytkowników indywidualnie, ponieważ każdy rekord zawiera `user_id`. Liczba sesji na użytkownika jest zróżnicowana: średnio wynosi 619,51, mediana 613,50, minimum 267, a maksimum 987 sesji. Tak duży zakres pokazuje, że użytkownicy różnią się systematycznością i długością aktywnej historii treningowej.
 
@@ -527,11 +559,11 @@ Przykład dla grupy `advanced male`:
 
 Wniosek jest ważny dla systemu rekomendacyjnego: dwóch użytkowników z tym samym poziomem `advanced` i tą samą kategorią `sex` może wymagać bardzo różnych obciążeń. Dlatego rekomendacje ciężaru powinny korzystać z historii użytkownika albo z kalibracji siłowej, a nie tylko z etykiety poziomu zaawansowania.
 
-## 5.9. Wnioski z EDA
+## 5.11. Wnioski z EDA
 
 EDA potwierdziła, że dataset ma strukturę umożliwiającą dalsze modelowanie. Zbiór zawiera wymagane kolumny, nie ma braków danych ani duplikatów, obejmuje ponad 1,2 mln rekordów i pozwala analizować treningi na poziomie serii, sesji oraz użytkownika.
 
-W danych występują zróżnicowane ćwiczenia, fazy treningowe i splity, co jest istotne dla budowy rekomendera. Rozkłady kategorii nie są idealnie równomierne, ale odzwierciedlają różne profile użytkowników i typy treningu. Analiza objętości pokazała, że zmienna `volume` jest przydatna do opisu pracy treningowej oraz obserwacji trendów w czasie.
+W danych występują zróżnicowane ćwiczenia, fazy treningowe i splity, co jest istotne dla budowy rekomendera. Rozkłady kategorii nie są idealnie równomierne, ale odzwierciedlają różne profile użytkowników i typy treningu. Histogramy zmiennych numerycznych uzupełniają ten obraz o zakresy `reps`, `weight`, `fatigue` i `rir`, a macierz korelacji pokazuje najważniejsze zależności liniowe między zmiennymi.
 
 Wyniki EDA uzasadniają tworzenie cech historycznych, takich jak poprzedni ciężar, poprzednia liczba powtórzeń, poprzedni RIR, poprzednie zmęczenie i średnie kroczące. Dane treningowe mają charakter sekwencyjny, dlatego historia użytkownika jest kluczowa dla przewidywania kolejnych obciążeń.
 
