@@ -720,16 +720,15 @@ Wartości kalibracyjne są dodatkowo modyfikowane przez fazę treningową: `stre
 
 ## 8.9. Źródła finalnego ciężaru
 
-Finalny ciężar może pochodzić z kilku źródeł, zależnie od dostępności historii i kalibracji:
+Finalny ciężar może pochodzić z kilku źródeł, zależnie od dostępności historii i kalibracji. W aktualnej implementacji model zawsze generuje `model_predicted_weight`, ale `weight_source` dla finalnej rekomendacji przyjmuje przede wszystkim wartości opisujące źródło praktycznego punktu odniesienia:
 
 | Źródło | Znaczenie |
 | --- | --- |
 | `user_history` | Wykorzystanie historii konkretnego użytkownika i jego wcześniejszych serii w danym ćwiczeniu. |
 | `strength_calibration` | Wykorzystanie ciężarów roboczych podanych ręcznie przez nowego użytkownika. |
-| `model_prediction` | Bezpośrednie użycie predykcji modelu jako punktu wyjścia dla rekomendacji. |
 | `fallback_median` | Wartość orientacyjna oparta na medianach z danych podobnych użytkowników lub całego datasetu. |
 
-W aktualnej logice Live Generatora każda pozycja planu zawiera `model_predicted_weight`, ale źródło finalnego ciężaru jest ustalane priorytetowo. Najpierw używana jest historia użytkownika, potem kalibracja siłowa, a w razie ich braku fallback oparty na danych podobnych użytkowników. Etykieta `model_prediction` jest obsługiwana w warstwie prezentacyjnej jako techniczna kategoria bezpośredniego wykorzystania modelu.
+Predykcja modelu jest więc punktem odniesienia dla logiki rekomendacyjnej i reguł bezpieczeństwa, ale finalny ciężar jest ustalany priorytetowo: najpierw na podstawie historii użytkownika, następnie kalibracji siłowej, a w razie ich braku przez fallback z danych podobnych użytkowników.
 
 ## 8.10. Wnioski dotyczące rekomendera
 
@@ -901,104 +900,198 @@ Jednocześnie dashboard pozostaje demonstratorem, a nie aplikacją produkcyjną.
 
 # 11. Ograniczenia projektu
 
-TODO: Zebrać ograniczenia danych, generatora, modelu, rekomendera i dashboardu.
+Projekt ma charakter demonstracyjny i edukacyjny, dlatego jego ograniczenia należy rozpatrywać na kilku poziomach: danych, generatora, modelu regresyjnego, systemu rekomendacyjnego oraz dashboardu. Ograniczenia te nie przekreślają wartości projektu, ale wskazują, jak należy interpretować uzyskane wyniki i w jakich obszarach system wymaga dalszej walidacji.
 
 ## 11.1. Syntetyczny charakter danych
 
-TODO: Opisać konsekwencje pracy na danych syntetycznych.
+Dane wykorzystane w projekcie nie pochodzą od rzeczywistych użytkowników. Są efektem działania generatora przygotowanego w repozytorium. Dzięki temu możliwe było stworzenie kompletnego datasetu, przeprowadzenie EDA, zbudowanie cech historycznych, wytrenowanie modeli oraz przygotowanie demonstratora systemu.
+
+Syntetyczny charakter danych dobrze sprawdza się w projekcie pokazującym pełny proces data science, ponieważ pozwala kontrolować strukturę zbioru i uniknąć problemów prywatności. Jednocześnie taki dataset nie może być traktowany jako pełny opis rzeczywistych zachowań treningowych. Wyniki analizy i modelowania pokazują działanie systemu w kontrolowanych warunkach, ale nie stanowią dowodu skuteczności na realnych danych treningowych.
 
 ## 11.2. Ograniczenia generatora
 
-TODO: Wskazać, że generator może nie odtworzyć wszystkich zależności treningowych.
+Generator upraszcza rzeczywistość treningową. Symuluje użytkowników, fazy treningowe, progresję, zmęczenie i parametry serii, ale nie jest w stanie odtworzyć wszystkich czynników wpływających na prawdziwy trening. W praktyce na wyniki użytkownika wpływają także technika, sen, stres, dieta, kontuzje, motywacja, jakość sprzętu, przerwy między seriami i wiele innych czynników.
+
+Realizm danych zależy od przyjętych założeń generatora. Zmienne takie jak `level`, `fatigue`, `rir`, progresja oraz fazy treningowe są symulowane. Oznacza to, że część relacji może być bardziej regularna niż w danych rzeczywistych, a część zależności może być uproszczona. Model trenowany na takich danych uczy się wzorców obecnych w generatorze, a niekoniecznie wzorców występujących w realnych dziennikach treningowych.
 
 ## 11.3. Ograniczenia modelu regresyjnego
 
-TODO: Opisać zależność modelu od dostępnych cech i jakości danych.
+Model regresyjny przewiduje `weight`, ale nie zna wszystkich czynników wpływających na dobór ciężaru. Wykorzystuje dostępne cechy z datasetu, w tym informacje o ćwiczeniu, profilu użytkownika, parametrach serii i historii. Nie uwzględnia jednak pełnego kontekstu fizjologicznego i treningowego użytkownika.
+
+Model uczy się wzorców z danych syntetycznych. Oznacza to, że dobry wynik na zbiorze testowym nie gwarantuje takiej samej jakości na danych rzeczywistych. Predykcja modelu nie powinna być traktowana jako gotowa porada treningowa. Jest to komponent wspierający system rekomendacyjny.
+
+Ograniczeniem jest także interpretacja błędu w kilogramach. Ten sam błąd może mieć inne znaczenie dla ćwiczenia akcesoryjnego, takiego jak `Lateral Raise`, i inne dla ćwiczenia wielostawowego, takiego jak `Squat` lub `Deadlift`. Dlatego model wymaga kontekstu, historii użytkownika i reguł bezpieczeństwa.
 
 ## 11.4. Problem cold start
 
-TODO: Wyjaśnić, dlaczego nowi użytkownicy wymagają kalibracji siłowej.
+Problem cold start pojawia się wtedy, gdy użytkownik nie ma historii treningowej w systemie. Bez historii model traci najważniejszy punkt odniesienia, czyli wcześniejsze ciężary użytkownika w konkretnych ćwiczeniach. W takim przypadku rekomendowanie absolutnego obciążenia jest znacznie trudniejsze.
+
+Sam wiek, płeć i poziom zaawansowania nie wystarczają do wiarygodnego określenia ciężaru roboczego. Dwie osoby o tym samym `level` mogą różnić się realną siłą bardzo znacząco. Z tego powodu w dashboardzie dodano tryb nowego użytkownika z kalibracją siłową, w którym użytkownik podaje aktualne ciężary robocze dla głównych ćwiczeń.
 
 ## 11.5. Ograniczenia zmiennej `level`
 
-TODO: Opisać, dlaczego `level` nie zastępuje informacji o realnej sile.
+Zmienna `level` jest ogólną kategorią opisującą poziom zaawansowania, ale nie zastępuje informacji o realnej sile użytkownika. Nie mówi bezpośrednio, ile dana osoba jest w stanie wykonać w `Bench Press`, `Squat` czy `Deadlift`.
+
+EDA potwierdziła duży rozrzut wyników nawet w tej samej grupie. Użytkownicy `advanced` mogą mieć bardzo różne ciężary robocze w tych samych ćwiczeniach. Oznacza to, że `level` może pomagać w doborze ogólnej struktury planu, ale nie powinien być jedyną podstawą do rekomendacji absolutnego ciężaru.
 
 ## 11.6. Brak walidacji eksperckiej
 
-TODO: Zaznaczyć potrzebę walidacji przez trenera i brak charakteru porady medycznej.
+Plany generowane przez system nie zostały zweryfikowane przez trenera personalnego ani specjalistę przygotowania motorycznego. Projekt nie ma charakteru medycznego i nie powinien być traktowany jako narzędzie do diagnozy, rehabilitacji ani planowania treningu osób z przeciwwskazaniami zdrowotnymi.
+
+Rekomendacje należy interpretować jako demonstrację działania systemu AI. Przed realnym użyciem potrzebna byłaby walidacja ekspercka: ocena doboru ćwiczeń, objętości, intensywności, progresji i reguł bezpieczeństwa przez osobę posiadającą kompetencje trenerskie.
 
 ## 11.7. Ograniczenia dashboardu
 
-TODO: Opisać dashboard jako demonstrator, a nie aplikację produkcyjną.
+Dashboard Streamlit jest demonstratorem, a nie aplikacją produkcyjną. Nie zawiera logowania użytkowników, bazy danych, zapisu historii wygenerowanych planów ani produkcyjnego API. Działa głównie lokalnie i korzysta z plików CSV oraz lokalnego modelu `.joblib`, jeżeli jest dostępny.
+
+Jego celem jest pokazanie procesu i wyniku projektu: danych, EDA, modelowania, rekomendacji, reguł bezpieczeństwa i Live Generatora. Nie jest to gotowy produkt SaaS ani aplikacja przygotowana do obsługi rzeczywistych użytkowników.
 
 # 12. Możliwości rozwoju
 
-TODO: Opisać kierunki dalszego rozwoju danych, modeli, rekomendera i dashboardu.
+Projekt można rozwijać w kilku kierunkach. Najważniejsze z nich dotyczą zastąpienia lub uzupełnienia danych syntetycznych danymi rzeczywistymi, rozbudowy cech użytkownika, lepszej personalizacji modelu, rozwoju rekomendera, walidacji eksperckiej oraz dopracowania dashboardu.
 
 ## 12.1. Użycie danych rzeczywistych
 
-TODO: Opisać możliwość zastąpienia danych syntetycznych rzeczywistymi danymi treningowymi.
+Najważniejszym kierunkiem rozwoju byłoby użycie realnych dzienników treningowych. Dane rzeczywiste pozwoliłyby sprawdzić, na ile założenia generatora odpowiadają praktyce oraz jak model zachowuje się poza środowiskiem syntetycznym.
+
+Taki zbiór umożliwiłby ocenę jakości rekomendacji w praktyce, porównanie predykcji z decyzjami trenerów lub użytkowników oraz wykrycie zależności, których generator nie uwzględnia. Dane rzeczywiste byłyby również podstawą do dalszej walidacji modelu i reguł bezpieczeństwa.
 
 ## 12.2. Dodanie nowych cech użytkownika
 
-TODO: Wymienić potencjalne cechy, np. masa ciała, wzrost, staż, wyniki bazowe, kontuzje i cel.
+System mógłby zostać rozbudowany o dodatkowe cechy użytkownika, które lepiej opisują kontekst treningowy. Szczególnie przydatne byłyby:
+
+* masa ciała,
+* wzrost,
+* dokładny staż treningowy,
+* aktualne ciężary robocze,
+* wyniki 1RM lub e1RM,
+* historia kontuzji,
+* cel treningowy,
+* dostępny sprzęt,
+* preferencje ćwiczeń,
+* informacje o śnie i regeneracji.
+
+Takie cechy pozwoliłyby lepiej odróżniać użytkowników o podobnym `level`, ale różnym realnym poziomie siły, możliwościach regeneracyjnych i ograniczeniach treningowych.
 
 ## 12.3. Rozbudowa modelu personalizacji
 
-TODO: Opisać możliwe modele sekwencyjne, rekomendacje użytkownik-ćwiczenie i personalizację progresji.
+Kolejnym kierunkiem jest rozbudowa modelu personalizacji. Dane treningowe mają charakter sekwencyjny, dlatego można rozważyć modele lepiej opisujące przebieg zmian w czasie. Możliwe byłoby także przygotowanie osobnych modeli dla ćwiczeń lub grup ćwiczeń, ponieważ błąd predykcji ma inne znaczenie dla ćwiczeń akcesoryjnych i wielostawowych.
+
+Warto rozważyć również modele rekomendacyjne typu użytkownik-ćwiczenie, które uczyłyby się preferencji i skuteczności ćwiczeń dla konkretnych profili. Dalszy rozwój mógłby obejmować ocenę jakości rekomendacji per użytkownik, personalizację tempa progresji oraz wykrywanie sytuacji, w których model działa słabiej dla określonych grup.
 
 ## 12.4. Rozbudowa systemu rekomendacyjnego
 
-TODO: Opisać lepszy dobór ćwiczeń, warianty planów, periodyzację i autoregulację.
+System rekomendacyjny można rozbudować o bardziej zaawansowany dobór ćwiczeń. Obecna logika wykorzystuje kategorie ruchu i dane podobnych użytkowników, ale w przyszłości mogłaby uwzględniać preferencje użytkownika, ograniczenia sprzętowe, przeciwwskazania, priorytety mięśniowe oraz warianty ćwiczeń.
+
+Rozwój rekomendera mógłby obejmować generowanie kilku wariantów planu, długoterminową periodyzację oraz autoregulację na podstawie RIR i fatigue. System mógłby modyfikować kolejne tygodnie planu na podstawie wykonania poprzednich jednostek treningowych, a nie tylko generować pojedynczy plan tygodniowy.
 
 ## 12.5. Walidacja ekspercka
 
-TODO: Opisać możliwość konsultacji i oceny systemu przez trenera personalnego.
+Ważnym etapem dalszego rozwoju byłaby konsultacja z trenerem personalnym. Ekspert mógłby ocenić wygenerowane plany, dobór ćwiczeń, objętość, intensywność, progresję oraz zastosowane reguły bezpieczeństwa.
+
+Walidacja mogłaby obejmować testy scenariuszowe dla różnych profili użytkowników, porównanie planów z planami przygotowanymi ręcznie oraz korektę reguł bezpieczeństwa na podstawie wiedzy trenerskiej. Dzięki temu system mógłby stać się bardziej wiarygodny i praktyczny.
 
 ## 12.6. Rozbudowa dashboardu
 
-TODO: Opisać możliwe ulepszenia UI, zapis użytkowników, historię planów i eksport PDF.
+Dashboard można rozbudować funkcjonalnie i wizualnie. Najważniejsze kierunki to zapis profili użytkowników, historia wygenerowanych planów, eksport planu do PDF, lepsze porównanie scenariuszy oraz możliwość uploadu własnych danych treningowych.
+
+Kolejnym krokiem mógłby być deployment aplikacji oraz poprawki UI/UX, takie jak bardziej rozbudowane formularze, lepsze komunikaty walidacyjne, widok historii progresji użytkownika i czytelniejsza prezentacja reguł bezpieczeństwa. Wersja produkcyjna wymagałaby także bazy danych, autoryzacji i stabilnego API.
 
 # 13. Podsumowanie i wnioski końcowe
 
-TODO: Podsumować wykonane prace, wyniki, wnioski metodologiczne i finalną ocenę projektu.
+Projekt obejmował przygotowanie kompletnego demonstratora systemu AI do analizy danych treningowych i generowania planów. Zrealizowano pełny przepływ od danych, przez modelowanie, aż po rekomendację i dashboard prezentacyjny.
 
 ## 13.1. Podsumowanie wykonanych prac
 
-TODO: Wymienić wykonane etapy: generator, EDA, modelowanie, rekomender i dashboard.
+W projekcie wykonano kilka powiązanych etapów:
+
+1. Przygotowano generator syntetycznych danych treningowych, który tworzy dane na poziomie pojedynczej serii.
+2. Wygenerowano kanoniczny dataset `data/FINAL_ENGINE_V4.csv`.
+3. Przeprowadzono eksploracyjną analizę danych, obejmującą strukturę zbioru, rozkłady zmiennych, ćwiczenia, objętość i użytkowników.
+4. Przygotowano dane do modelowania, w tym cechy historyczne i czasowy podział train/test.
+5. Porównano modele regresyjne przewidujące `weight`.
+6. Zbudowano hybrydowy system rekomendacyjny łączący model ML, historię użytkownika, dane podobnych użytkowników i reguły bezpieczeństwa.
+7. Przygotowano demonstrator Etapu 3 generujący plany dla kilku scenariuszy.
+8. Zbudowano dashboard Streamlit integrujący wyniki projektu oraz Live Generator.
 
 ## 13.2. Najważniejsze wyniki
 
-TODO: Opisać finalny model, jego główne metryki, demonstrator i dashboard.
+Dataset zawiera 1 215 602 rekordy, 100 użytkowników, 61 951 sesji treningowych i 15 ćwiczeń. Zakres danych obejmuje okres od 2022-01-01 do 2024-12-30. Zbiór pozwolił przeprowadzić EDA, przygotować cechy historyczne i wytrenować modele regresyjne.
+
+Najlepszy wynik według głównej metryki MAE uzyskał Random Forest. Model osiągnął MAE około 3.86 kg i poprawił wynik względem baseline `naive_prev_weight`. Różnica względem Ridge Regression była niewielka, dlatego wybór modelu finalnego należy rozumieć jako decyzję opartą na przyjętym kryterium MAE.
+
+Demonstrator Etapu 3 potwierdził, że system może generować plany dla różnych profili użytkowników, a dashboard Streamlit zintegrował wyniki projektu w jednym miejscu. Live Generator obsługuje zarówno użytkownika z historią, jak i nowego użytkownika z kalibracją siłową.
 
 ## 13.3. Wnioski metodologiczne
 
-TODO: Podkreślić znaczenie historii użytkownika, ograniczenia `level`, cold start i podejście hybrydowe.
+Najważniejszy wniosek metodologiczny jest taki, że sama predykcja modelu to za mało. Model ML może przewidywać sugerowany ciężar, ale finalna rekomendacja treningowa wymaga kontekstu użytkownika, historii, reguł bezpieczeństwa i interpretacji.
+
+Historia użytkownika jest szczególnie ważna, ponieważ poprzednie ciężary w tym samym ćwiczeniu stanowią najlepszy punkt odniesienia dla kolejnych rekomendacji. Zmienna `level` nie zastępuje realnej informacji o sile użytkownika. Problem cold start wymaga kalibracji siłowej albo bardzo ostrożnego traktowania rekomendacji.
+
+Podejście hybrydowe okazało się bardziej praktyczne niż sam model ML. System łączy predykcję, dane podobnych użytkowników, historię, kalibrację i reguły bezpieczeństwa. Jest to szczególnie istotne w obszarze treningu siłowego, gdzie błędna rekomendacja może prowadzić do zbyt agresywnej progresji.
 
 ## 13.4. Wniosek końcowy
 
-TODO: Sformułować końcowy wniosek o spełnieniu celu projektu demonstracyjnego.
+Projekt spełnił cel jako demonstracyjny system AI do analizy danych treningowych i generowania planów. Pokazuje pełny proces data science: przygotowanie danych, eksplorację, modelowanie, rekomendację, demonstrator oraz dashboard. System wymaga dalszej walidacji przed użyciem praktycznym, zwłaszcza na danych rzeczywistych i z udziałem ekspertów treningowych. Stanowi jednak dobrą bazę do dalszego rozwoju w kierunku bardziej zaawansowanej personalizacji treningu.
 
 # Bibliografia
 
-TODO: Uzupełnić źródła dotyczące scikit-learn, Streamlit, Random Forest, metryk regresji, RIR, treningu siłowego i systemów rekomendacyjnych.
+1. scikit-learn developers, *scikit-learn User Guide*, https://scikit-learn.org/stable/user_guide.html.
+2. scikit-learn developers, *Regression metrics*, https://scikit-learn.org/stable/modules/model_evaluation.html#regression-metrics.
+3. scikit-learn developers, *RandomForestRegressor documentation*, https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html.
+4. Streamlit, *Streamlit documentation*, https://docs.streamlit.io/.
+5. pandas development team, *pandas documentation*, https://pandas.pydata.org/docs/.
+6. Breiman, L. (2001). Random Forests. *Machine Learning*, 45, 5-32.
+7. Ricci, F., Rokach, L., Shapira, B. (red.). (2011). *Recommender Systems Handbook*. Springer.
+8. Helms, E. R., Cronin, J., Storey, A., Zourdos, M. C. (2016). Application of the Repetitions in Reserve-Based Rating of Perceived Exertion Scale for Resistance Training. *Strength and Conditioning Journal*, 38(4), 42-49.
+9. American College of Sports Medicine. (2009). Progression Models in Resistance Training for Healthy Adults. *Medicine & Science in Sports & Exercise*, 41(3), 687-708.
 
 # Załączniki
 
-TODO: Dodać materiały uzupełniające, które wspierają raport główny.
+Załączniki wskazują najważniejsze elementy repozytorium i materiały pomocnicze, które wspierają raport główny.
 
 ## Załącznik A. Struktura repozytorium
 
-TODO: Opisać najważniejsze katalogi i pliki projektu.
+Najważniejsze katalogi repozytorium:
+
+| Katalog | Rola |
+| --- | --- |
+| `data/` | Kanoniczny dataset projektu, w tym `FINAL_ENGINE_V4.csv`. |
+| `scripts/` | Skrypty etapów projektu: EDA, modelowanie i demonstrator. |
+| `src/` | Kod pomocniczy, w tym logika rekomendacyjna używana przez dashboard. |
+| `app/` | Aplikacja Streamlit prezentująca wyniki projektu. |
+| `app/demo_assets/` | Małe pliki CSV używane przez dashboard w trybie prezentacyjnym. |
+| `models/` | Lokalizacja artefaktu modelu `.joblib`, generowanego poza zwykłym commitem. |
+| `outputs/` | Lokalne wyniki skryptów, wykresy i tabele pomocnicze; nie są commitowane jako część raportu. |
+| `report/` | Plik raportu końcowego. |
 
 ## Załącznik B. Najważniejsze skrypty
 
-TODO: Opisać skrypty EDA, modelowania, demonstratora i aplikację Streamlit.
+Najważniejsze skrypty i moduły:
+
+| Plik | Opis |
+| --- | --- |
+| `scripts/01_eda.py` | Realizuje eksploracyjną analizę danych, tworzy wykresy, tabele pomocnicze, agregacje i pierwsze cechy analityczne. |
+| `scripts/02_modeling_and_recommendation.py` | Przygotowuje dane modelowe, tworzy cechy historyczne, porównuje modele regresyjne, zapisuje najlepszy model i buduje prototyp rekomendera. |
+| `scripts/03_system_demo.py` | Ładuje model z Etapu 2 i generuje demonstracyjne plany treningowe dla kilku scenariuszy użytkowników. |
+| `app/streamlit_app.py` | Definiuje dashboard Streamlit, zakładki prezentacyjne i Live Generator. |
+| `src/recommendation_engine.py` | Zawiera logikę rekomendacyjną używaną przez dashboard, w tym dobór splitu, ćwiczeń, parametry serii, kalibrację i reguły bezpieczeństwa. |
 
 ## Załącznik C. Przykładowy wygenerowany plan
 
-TODO: Dodać jeden przykładowy plan wygenerowany przez system.
+Przykładowe plany treningowe są generowane w Etapie 3 i przechowywane jako pliki `plan_*.csv` w `app/demo_assets/`. Raport omawia wybrane fragmenty planów w rozdziale 9, natomiast pełne tabele można podejrzeć w dashboardzie w zakładce Recommendation Demo.
+
+[Miejsce na fragment przykładowego planu wygenerowanego przez system]
 
 ## Załącznik D. Wybrane metryki modelu
 
-TODO: Dodać tabelę porównania modeli i/lub ewaluację grupową.
+Skrócona tabela wyników modeli:
+
+| Model | MAE | RMSE | R² | Within 5 kg |
+| --- | ---: | ---: | ---: | ---: |
+| Random Forest | 3.8604 | 7.1335 | 0.9625 | 77.287% |
+| Ridge Regression | 3.8780 | 6.9160 | 0.9648 | 77.344% |
+| HistGradientBoosting | 3.9486 | 7.7548 | 0.9557 | 77.449% |
+| Naive baseline | 4.6917 | 8.5286 | 0.9464 | 71.867% |
+
+Pełniejsza interpretacja wyników znajduje się w rozdziale 7.
