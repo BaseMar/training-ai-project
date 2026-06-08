@@ -4,15 +4,15 @@
 
 **Tytuł pracy:** Projekt i implementacja systemu sztucznej inteligencji do analizy danych treningowych
 
-**Autor:** Martino Sebastiani
+**Autorzy:** Martino Sebastiani, Zuzanna Klimaszewska
 
-**Kierunek / studia:** [uzupełnić]
+**Kierunek / studia:** Analiza Danych - Data Science z Elementami AI
 
-**Promotor / prowadzący:** [uzupełnić]
+**Promotor / prowadzący:** Bartosz Bryniarski
 
-**Uczelnia:** [uzupełnić]
+**Uczelnia:** WSB Merito
 
-**Rok akademicki:** [uzupełnić]
+**Rok akademicki:** 2025/2026
 
 # Streszczenie
 
