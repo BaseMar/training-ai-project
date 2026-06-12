@@ -1,88 +1,241 @@
 # Training AI Project
 
-System analizy danych treningowych i generowania demonstracyjnych rekomendacji planu siłowego z wykorzystaniem syntetycznych danych, modeli regresyjnych i dashboardu Streamlit.
+End-to-end Data Science project for synthetic strength-training data generation,
+exploratory analysis, weight prediction, and demonstrational workout-plan
+recommendations.
 
-## Opis projektu
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-red)
+![ML](https://img.shields.io/badge/ML-scikit--learn-orange)
+![Data](https://img.shields.io/badge/data-synthetic-green)
+![Status](https://img.shields.io/badge/status-portfolio%20demo-lightgrey)
 
-`Training AI Project` to projekt portfolio z obszaru Data Science / Python, który pokazuje kompletny proces pracy z danymi treningowymi: od wygenerowania syntetycznego zbioru danych, przez EDA i feature engineering, po model predykcyjny oraz hybrydowy system rekomendacyjny.
+## Table of Contents
 
-Projekt rozwiązuje problem analizy historii treningu siłowego i wspomagania decyzji o kolejnych parametrach treningu: doborze splitu, ćwiczeń, liczby serii, liczby powtórzeń, docelowego RIR, poziomu zmęczenia oraz sugerowanego ciężaru. Rekomendacje mają charakter demonstracyjny i nie zastępują trenera, fizjoterapeuty ani konsultacji medycznej.
+- [Project Goal](#project-goal)
+- [Project Scope](#project-scope)
+- [Project Status](#project-status)
+- [Preview](#preview)
+- [Tech Stack](#tech-stack)
+- [What It Does](#what-it-does)
+- [Example Insights](#example-insights)
+- [Features](#features)
+- [Dashboard Sections](#dashboard-sections)
+- [Workflow](#workflow)
+- [Architecture](#architecture)
+- [Data](#data)
+- [Modeling Results](#modeling-results)
+- [Installation](#installation)
+- [Running The Project](#running-the-project)
+- [Reports And Outputs](#reports-and-outputs)
+- [Tests](#tests)
+- [Design Principles](#design-principles)
+- [Limitations & Future Work](#limitations--future-work)
+- [Screenshots](#screenshots)
+- [Authors](#authors)
 
-Z perspektywy portfolio projekt pokazuje:
+## Project Goal
 
-- generowanie i walidację syntetycznego datasetu,
-- eksploracyjną analizę danych i wizualizacje,
-- przygotowanie cech historycznych dla problemu regresji,
-- porównanie modeli ML i zapis najlepszego pipeline'u,
-- implementację regułowego i modelowego systemu rekomendacyjnego,
-- aplikację Streamlit prezentującą dane, model i scenariusze rekomendacji.
+Training AI Project explores how machine learning can support strength-training
+analysis and workout-plan recommendations without using real personal training
+logs.
 
-## Główne funkcjonalności
+The project builds a complete analytical pipeline:
 
-- **Generator syntetycznych danych treningowych**  
-  Moduł `generator/` symuluje użytkowników, sesje treningowe i serie ćwiczeń z uwzględnieniem poziomu zaawansowania, splitu, fazy treningowej, zmęczenia, RIR, progresji oraz losowych wahań dyspozycji.
+- generate realistic synthetic set-level gym data,
+- inspect training patterns through EDA,
+- engineer historical features for a regression problem,
+- train and compare weight-prediction models,
+- combine the selected model with rule-based recommendation logic,
+- present the dataset, model behavior, and generated plans in Streamlit.
 
-- **Kanoniczny dataset treningowy**  
-  Plik `data/FINAL_ENGINE_V4.csv` zawiera dane na poziomie pojedynczej serii treningowej. W aktualnej wersji ma 1 215 602 rekordy, 100 syntetycznych użytkowników, 61 951 sesji i 15 ćwiczeń.
+The recommendation layer is a demonstrational decision-support prototype. It is
+not a medical tool, a production coaching system, or a replacement for a trainer,
+physiotherapist, or clinical advice.
 
-- **Eksploracyjna analiza danych**  
-  Skrypt `scripts/01_eda.py` analizuje strukturę danych, braki, duplikaty, rozkłady zmiennych, trendy objętości, relacje między poziomem, splitem, fazą i płcią oraz tworzy cechy `volume` i `e1rm_epley`.
+## Project Scope
 
-- **Modelowanie predykcyjne**  
-  Skrypt `scripts/02_modeling_and_recommendation.py` przygotowuje cechy historyczne, wykonuje czasowy podział train/test, porównuje modele regresyjne i zapisuje najlepszy model jako `models/best_weight_prediction_model.joblib`.
+The repository contains the full project flow, including:
 
-- **Hybrydowy rekomender planów treningowych**  
-  Moduł `src/recommendation_engine.py` łączy wynik modelu ML, dane podobnych użytkowników, historię konkretnego użytkownika, kalibrację siłową i reguły bezpieczeństwa.
+- synthetic workout dataset generator,
+- canonical CSV dataset used by the analysis and dashboard,
+- exploratory analysis scripts and charts,
+- feature engineering for historical workout context,
+- regression model comparison and saved best pipeline,
+- hybrid recommendation engine,
+- end-to-end demo scenarios,
+- Streamlit dashboard,
+- final report and presentation materials.
 
-- **Demo end-to-end**  
-  Skrypt `scripts/03_system_demo.py` ładuje dataset i model, wykonuje sanity check modelu, generuje kilka scenariuszy planów tygodniowych i zapisuje wyniki do `outputs/stage3_outputs/`.
+## Project Status
 
-- **Dashboard Streamlit**  
-  Aplikacja `app/streamlit_app.py` prezentuje dataset, EDA, wyniki modelu, scenariusze rekomendacji, reguły bezpieczeństwa oraz formularz `Live Generator` do generowania planu na żywo, jeśli lokalnie dostępny jest model `.joblib`.
+The project is a functional portfolio/demo project. Core parts are implemented:
+data generation, EDA, model training, recommendation scenarios, local Streamlit
+dashboard, and final report.
 
-## Technologie
+Current version is intended for local review. The trained model artifact
+`models/best_weight_prediction_model.joblib` is generated locally and ignored by
+Git because of its size. If it is missing after a fresh clone, run Stage 2 before
+using the live recommendation generator.
 
-Technologie i biblioteki widoczne w repozytorium:
+## Preview
 
-- Python
-- pandas
-- NumPy
-- scikit-learn
-- joblib
-- Streamlit
-- matplotlib
-- seaborn
-- CSV
-- Markdown
-- PDF / DOCX jako formaty raportu
+![Dashboard overview](report/images/dashboard_overview.png)
 
-## Struktura projektu
+![ML model view](report/images/dashboard_ml_model.png)
+
+![Live generator](report/images/dashboard_live_generator.png)
+
+## Tech Stack
+
+- **Python 3.10+**
+- **Pandas** and **NumPy** for data processing
+- **scikit-learn** for regression pipelines and model comparison
+- **joblib** for model serialization
+- **Streamlit** for the dashboard UI
+- **matplotlib** and **seaborn** for charts
+- **CSV** as the main data and artifact format
+- **Markdown / PDF / DOCX** for report outputs
+
+## What It Does
+
+Training AI Project simulates multiple years of strength-training history for
+synthetic users, analyzes the resulting dataset, trains a model to predict
+working weight, and uses that model inside a hybrid workout-plan recommender.
+
+The system works at set level. Each row describes one performed set with
+exercise, repetitions, weight, fatigue, RIR, training level, split, phase, and
+user metadata. These rows are then aggregated and transformed into features that
+describe recent training history for a given user and exercise.
+
+The final recommendation flow combines:
+
+- model-predicted weights,
+- user history when available,
+- similar-user fallback data,
+- strength calibration anchors,
+- split and exercise-selection rules,
+- safety constraints for fatigue, RIR, deload phases, and older users.
+
+## Example Insights
+
+The project can answer questions such as:
+
+- What do synthetic training patterns look like across levels, splits, phases,
+  and sex?
+- Which exercises dominate the generated dataset?
+- How do volume, RIR, fatigue, and working weight vary over time?
+- How well can previous training history predict the next working weight?
+- Which model performs best for this regression task?
+- Which features matter most for predicted training weight?
+- How do recommendation scenarios change for beginner, intermediate, advanced,
+  deload, and older-user profiles?
+- When do safety rules reduce or cap the recommended load?
+
+## Features
+
+### Synthetic Data Generation
+
+- Configurable number of users and simulated years.
+- Set-level workout history with users, sessions, exercises, sets, reps, weight,
+  fatigue, RIR, level, split, phase, and sex.
+- Training behavior shaped by experience level, training split, phase, fatigue,
+  progression, and random daily variation.
+- Command-line entry point for regenerating the canonical dataset.
+
+### Exploratory Data Analysis
+
+- Dataset validation, missing-value checks, and duplicate checks.
+- Distribution charts for weight, reps, RIR, fatigue, level, split, phase, and
+  sex.
+- Exercise frequency and session-level summaries.
+- Daily volume trends and correlation analysis.
+- Derived analytical features such as volume and Epley estimated 1RM.
+
+### Predictive Modeling
+
+- Historical features using previous set values and rolling averages.
+- Time-based train/test split to better reflect future prediction.
+- Comparison of Random Forest, Ridge Regression, HistGradientBoosting, and a
+  naive previous-weight baseline.
+- Model evaluation by MAE, RMSE, R2, and percentage of predictions within 2.5 kg
+  and 5 kg.
+- Saved best model pipeline in `models/best_weight_prediction_model.joblib`.
+
+### Hybrid Recommendation Engine
+
+- Split choice based on requested training days.
+- Exercise selection by push, pull, legs, upper/lower, or full-body structure.
+- Weight recommendation from strength calibration, user history, model
+  prediction, or fallback medians.
+- Practical rounding to common gym increments.
+- Safety adjustments for high fatigue, low RIR, deload phase, progression caps,
+  and age-sensitive recommendations.
+
+### Streamlit Dashboard
+
+- Dataset overview and user-level analysis.
+- EDA visualizations and training distributions.
+- ML model metrics, comparisons, and feature importance.
+- Static recommendation-demo scenarios.
+- Live generator for local recommendations when the trained model is available.
+
+## Dashboard Sections
+
+- `Overview` - project summary, dataset shape, and high-level context.
+- `Dataset & User Analysis` - synthetic users, sessions, exercises, and training
+  distributions.
+- `EDA` - exploratory charts and correlations.
+- `ML Model` - model comparison, evaluation metrics, and feature importance.
+- `Recommendation Demo` - prepared weekly plans for selected scenarios.
+- `Live Generator` - interactive local plan generation using the trained model.
+
+## Workflow
+
+```text
+generator/
+  -> data/FINAL_ENGINE_V4.csv
+  -> scripts/01_eda.py
+  -> scripts/02_modeling_and_recommendation.py
+  -> models/best_weight_prediction_model.joblib
+  -> scripts/03_system_demo.py
+  -> app/demo_assets/
+  -> app/streamlit_app.py
+```
+
+1. `generator/main.py` creates the synthetic set-level dataset.
+2. `scripts/01_eda.py` validates and explores the dataset.
+3. `scripts/02_modeling_and_recommendation.py` engineers features, trains
+   models, compares results, and saves the best model.
+4. `scripts/03_system_demo.py` loads the trained model and generates complete
+   weekly recommendation scenarios.
+5. `app/streamlit_app.py` presents the dataset, analysis, model outputs, demo
+   plans, and live generator.
+
+## Architecture
+
+The repository is split into focused layers:
 
 ```text
 TrainingAIProject/
 |-- app/
-|   |-- demo_assets/
-|   |   |-- scenario_comparison.csv
-|   |   `-- plan_*.csv
-|   `-- streamlit_app.py
+|   |-- demo_assets/       # small CSV scenarios used by the dashboard
+|   `-- streamlit_app.py   # Streamlit UI
 |-- data/
 |   `-- FINAL_ENGINE_V4.csv
 |-- generator/
-|   |-- README_generator.md
-|   |-- config.py
-|   |-- generator.py
-|   |-- main.py
-|   |-- models.py
-|   `-- session.py
+|   |-- config.py          # simulation configuration
+|   |-- generator.py       # dataset orchestration
+|   |-- main.py            # CLI entry point
+|   |-- models.py          # synthetic user/training domain objects
+|   `-- session.py         # session and set simulation
 |-- models/
-|   `-- best_weight_prediction_model.joblib       # generowany lokalnie, ignorowany przez Git
+|   `-- *.joblib           # generated locally, ignored by Git
 |-- outputs/
-|   |-- eda_outputs/                              # generowane lokalnie
-|   |-- stage2_outputs/                           # generowane lokalnie
-|   `-- stage3_outputs/                           # generowane lokalnie
-|-- presentation/
+|   |-- eda_outputs/       # generated locally
+|   |-- stage2_outputs/    # generated locally
+|   `-- stage3_outputs/    # generated locally
 |-- report/
-|   |-- final_report.md
 |   |-- final_report.pdf
 |   |-- final_report.docx
 |   `-- images/
@@ -92,262 +245,272 @@ TrainingAIProject/
 |   `-- 03_system_demo.py
 |-- src/
 |   `-- recommendation_engine.py
-|-- .gitignore
+|-- presentation/
 |-- README.md
 `-- requirements.txt
 ```
 
-Najważniejsze elementy:
+Core rule: generation, modeling, recommendation logic, and dashboard rendering
+are separated. The reusable recommendation code lives in
+`src/recommendation_engine.py`, while the Streamlit app imports it for
+interactive use.
 
-- `generator/` - logika tworzenia syntetycznych danych treningowych.
-- `data/FINAL_ENGINE_V4.csv` - główne wejście dla analizy, modelowania i dashboardu.
-- `scripts/` - uruchamialne etapy projektu: EDA, modelowanie, demo systemu.
-- `src/recommendation_engine.py` - wielokrotnego użytku logika rekomendacyjna wykorzystywana przez dashboard.
-- `app/` - aplikacja Streamlit oraz małe pliki CSV z gotowymi scenariuszami demo.
-- `report/` - raport projektu i obrazy używane do prezentacji wyników.
-- `outputs/` - lokalne wyniki skryptów; katalogi są ignorowane przez Git.
-- `models/*.joblib` - lokalne artefakty modeli; ignorowane przez Git ze względu na rozmiar.
+## Data
 
-## Instalacja i uruchomienie
-
-### 1. Klonowanie repozytorium
-
-```bash
-git clone <repository-url>
-cd TrainingAIProject
-```
-
-### 2. Utworzenie środowiska wirtualnego
-
-Projekt używa składni typów dostępnej w Pythonie 3.10+, więc taka wersja Pythona jest minimalnym sensownym wymaganiem. Repozytorium nie zawiera `pyproject.toml` ani dokładnej deklaracji wersji Pythona.
-
-Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-macOS / Linux:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-### 3. Uruchomienie generatora danych
-
-```bash
-python generator/main.py --users 100 --years 3 --output data/FINAL_ENGINE_V4.csv
-```
-
-Szybki test bez zapisu pliku:
-
-```bash
-python generator/main.py --users 5 --years 1 --no-save
-```
-
-### 4. Uruchomienie EDA
-
-```bash
-python scripts/01_eda.py
-```
-
-Wyniki robocze są zapisywane do:
-
-```text
-outputs/eda_outputs/
-```
-
-### 5. Trenowanie modelu i rekomender Stage 2
-
-```bash
-python scripts/02_modeling_and_recommendation.py
-```
-
-Skrypt zapisuje wyniki do `outputs/stage2_outputs/` oraz model do:
-
-```text
-models/best_weight_prediction_model.joblib
-```
-
-Plik modelu jest duży i znajduje się w `.gitignore`, dlatego po świeżym klonie może wymagać ponownego wygenerowania przez uruchomienie Stage 2.
-
-### 6. Uruchomienie demo end-to-end
-
-```bash
-python scripts/03_system_demo.py
-```
-
-Ten etap wymaga istniejącego modelu `models/best_weight_prediction_model.joblib`. Jeżeli go brakuje, najpierw uruchom Stage 2.
-
-### 7. Uruchomienie dashboardu Streamlit
-
-```bash
-streamlit run app/streamlit_app.py
-```
-
-Dashboard działa w dwóch trybach:
-
-- tryb prezentacyjny na plikach `app/demo_assets/*.csv`,
-- tryb `Live Generator`, który wymaga lokalnego modelu `models/best_weight_prediction_model.joblib`.
-
-### 8. Raport i materiały
-
-Raport projektu można otworzyć z katalogu:
-
-```text
-report/final_report.md
-report/final_report.pdf
-report/final_report.docx
-```
-
-Obrazy raportowe i screeny dashboardu znajdują się w:
-
-```text
-report/images/
-```
-
-## Dane
-
-Główny dataset projektu:
+Main dataset:
 
 ```text
 data/FINAL_ENGINE_V4.csv
 ```
 
-Dane są syntetyczne i lokalne. Zostały wygenerowane przez moduł `generator/`, a nie pobrane z rzeczywistych dzienników treningowych.
+The data is synthetic. It is generated by the local simulation module and does
+not contain real workout logs or personal user data.
 
-Aktualny plik danych zawiera:
+Current dataset snapshot:
 
-| Cecha | Wartość |
+| Property | Value |
 | --- | ---: |
-| Liczba rekordów | 1 215 602 |
-| Liczba kolumn | 13 |
-| Liczba użytkowników | 100 |
-| Liczba sesji | 61 951 |
-| Liczba ćwiczeń | 15 |
-| Zakres dat | 2022-01-01 - 2024-12-30 |
+| Rows | 1,215,602 |
+| Columns | 13 |
+| Synthetic users | 100 |
+| Sessions | 61,951 |
+| Exercises | 15 |
+| Date range | 2022-01-01 to 2024-12-30 |
 
-Kolumny datasetu:
+Dataset columns:
 
-| Kolumna | Znaczenie |
+| Column | Meaning |
 | --- | --- |
-| `user_id` | Identyfikator syntetycznego użytkownika. |
-| `session_id` | Identyfikator sesji treningowej. |
-| `date` | Data treningu. |
-| `exercise` | Nazwa ćwiczenia. |
-| `set_number` | Numer serii w ramach ćwiczenia. |
-| `reps` | Liczba powtórzeń. |
-| `weight` | Ciężar roboczy w kilogramach. |
-| `fatigue` | Poziom zmęczenia używany w symulacji. |
-| `rir` | Reps In Reserve, czyli liczba powtórzeń w zapasie. |
-| `level` | Poziom zaawansowania: `beginner`, `intermediate`, `advanced`. |
-| `split` | Split treningowy: `fbw`, `ppl`, `upper_lower`. |
-| `phase` | Faza treningowa: `hypertrophy`, `strength`, `deload`. |
-| `sex` | Płeć syntetycznego użytkownika: `female`, `male`. |
+| `user_id` | Synthetic user identifier. |
+| `session_id` | Training session identifier. |
+| `date` | Workout date. |
+| `exercise` | Exercise name. |
+| `set_number` | Set number within the exercise. |
+| `reps` | Number of repetitions. |
+| `weight` | Working weight in kilograms. |
+| `fatigue` | Simulated fatigue level. |
+| `rir` | Reps in reserve. |
+| `level` | Training level: `beginner`, `intermediate`, or `advanced`. |
+| `split` | Training split: `fbw`, `ppl`, or `upper_lower`. |
+| `phase` | Training phase: `hypertrophy`, `strength`, or `deload`. |
+| `sex` | Synthetic user sex: `female` or `male`. |
 
-W katalogu `app/demo_assets/` znajdują się mniejsze pliki CSV z gotowymi scenariuszami demonstracyjnymi:
+Small dashboard-ready demo assets are stored in `app/demo_assets/`:
 
-- `scenario_comparison.csv`,
-- `plan_beginner_female_hypertrophy.csv`,
-- `plan_intermediate_male_strength.csv`,
-- `plan_advanced_male_deload.csv`,
-- `plan_older_beginner_hypertrophy.csv`,
-- `plan_existing_user_with_history.csv`.
+- `scenario_comparison.csv`
+- `plan_beginner_female_hypertrophy.csv`
+- `plan_intermediate_male_strength.csv`
+- `plan_advanced_male_deload.csv`
+- `plan_older_beginner_hypertrophy.csv`
+- `plan_existing_user_with_history.csv`
 
-## Sposób działania
+## Modeling Results
 
-Ogólny przepływ projektu:
+Stage 2 compares several approaches for predicting working weight.
 
-```text
-generator/ -> data/FINAL_ENGINE_V4.csv -> EDA -> feature engineering
--> model regresyjny -> rekomender hybrydowy -> demo CSV / dashboard Streamlit
-```
-
-1. `generator/main.py` uruchamia symulację użytkowników i zapisuje dane do CSV.
-2. `scripts/01_eda.py` sprawdza jakość danych, rozkłady, trendy oraz tworzy pierwsze cechy analityczne.
-3. `scripts/02_modeling_and_recommendation.py` tworzy cechy historyczne, trenuje modele regresyjne i wybiera najlepszy model według MAE.
-4. Model przewiduje ciężar pasujący do planowanych parametrów serii: ćwiczenia, liczby powtórzeń, RIR, zmęczenia, fazy i historii użytkownika.
-5. Rekomender łączy predykcję modelu z regułami biznesowymi: wyborem splitu, doborem ćwiczeń, fallbackiem na podobnych użytkowników i limitami bezpieczeństwa.
-6. `scripts/03_system_demo.py` generuje przykładowe plany tygodniowe.
-7. `app/streamlit_app.py` prezentuje dataset, EDA, model, gotowe plany oraz formularz live generatora.
-
-## Wyniki, dashboard i przykładowe użycie
-
-Repozytorium zawiera raport i obrazy prezentujące wyniki analizy oraz dashboard:
-
-![Dashboard overview](report/images/dashboard_overview.png)
-
-Przykładowe artefakty wynikowe:
-
-- raport końcowy w `report/final_report.md`, `report/final_report.pdf` i `report/final_report.docx`,
-- wykresy EDA w `report/images/`, m.in. rozkłady poziomów, faz, ciężaru, RIR i trend dziennej objętości,
-- obrazy porównania modeli w `report/images/model_mae_comparison.png` i `report/images/model_within_5kg_comparison.png`,
-- screeny dashboardu w `report/images/dashboard_*.png`,
-- scenariusze planów w `app/demo_assets/`.
-
-W lokalnych wynikach Stage 2 porównano:
-
-| Model | MAE | RMSE | R2 | Predykcje w granicy 5 kg |
+| Model | MAE | RMSE | R2 | Within 5 kg |
 | --- | ---: | ---: | ---: | ---: |
 | Random Forest | 3.8604 | 7.1335 | 0.9625 | 77.287% |
 | Ridge Regression | 3.8780 | 6.9160 | 0.9648 | 77.344% |
 | HistGradientBoosting | 3.9486 | 7.7548 | 0.9557 | 77.449% |
 | Naive previous weight | 4.6917 | 8.5286 | 0.9464 | 71.867% |
 
-Według metryki MAE najlepszy był model `Random Forest`, który został zapisany jako `models/best_weight_prediction_model.joblib`.
+The selected model artifact is saved as:
 
-## Najważniejsze decyzje projektowe
+```text
+models/best_weight_prediction_model.joblib
+```
 
-- **Dane syntetyczne zamiast rzeczywistych**  
-  Projekt nie używa danych osobowych ani realnych dzienników treningowych. Generator pozwala kontrolować strukturę danych i testować pełny pipeline bez ryzyka prywatności.
+Stage 3 also runs a sanity check on the loaded model and writes compact metrics
+to `outputs/stage3_outputs/model_sanity_check_metrics.csv`.
 
-- **Poziom pojedynczej serii jako jednostka obserwacji**  
-  Każdy rekord opisuje jedną serię. Dzięki temu dane można agregować do poziomu ćwiczenia, sesji, tygodnia lub użytkownika.
+## Installation
 
-- **Cechy historyczne bez przecieku danych**  
-  Skrypty modelujące używają `shift(1)` oraz średnich kroczących z poprzednich obserwacji, aby model nie widział informacji z aktualnie przewidywanej serii.
+Requirements:
 
-- **Predykcja ciężaru jako problem regresyjny**  
-  Model odpowiada na pytanie: jaki ciężar pasuje do planowanych parametrów serii i historii użytkownika.
+- Python 3.10 or newer
+- dependencies from `requirements.txt`
 
-- **Rekomendacja hybrydowa**  
-  Finalny plan nie jest czystą predykcją ML. System łączy model, podobnych użytkowników, historię, kalibrację siłową oraz reguły bezpieczeństwa.
+Clone the repository and create a virtual environment:
 
-- **Reguły bezpieczeństwa jako ograniczenia rekomendacji**  
-  Rekomender ogranicza progresję przy wysokim zmęczeniu, niskim RIR, fazie `deload` oraz dla starszych użytkowników.
+```bash
+git clone <repository-url>
+cd TrainingAIProject
+python -m venv .venv
+```
 
-- **Oddzielenie artefaktów roboczych od repozytorium**  
-  `outputs/` i `models/*.joblib` są ignorowane przez Git. Repozytorium zawiera kod, dane kanoniczne, raport i lekkie artefakty demo.
+Activate it on Windows PowerShell:
 
-## Możliwe usprawnienia
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-- Dodanie deklaracji minimalnej wersji Pythona i wersji bibliotek w `requirements.txt`.
-- Udostępnienie modelu `.joblib` przez GitHub Release albo Git LFS.
-- Dodanie testów jednostkowych dla generatora i rekomendera.
-- Rozbudowanie walidacji danych wejściowych w dashboardzie.
-- Dodanie osobnej tabeli profili użytkowników, np. z wiekiem, celem i ograniczeniami treningowymi.
-- Walidacja rekomendacji na danych rzeczywistych lub przez eksperta treningowego.
-- Dodanie automatycznego procesu odświeżania `app/demo_assets/` po uruchomieniu Stage 3.
+Activate it on macOS or Linux:
 
-## Status projektu
+```bash
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-Projekt portfolio / demonstrator Data Science w trakcie rozwoju. Główne elementy pipeline'u są zaimplementowane: generator danych, EDA, modelowanie, rekomender, demo end-to-end, dashboard Streamlit oraz raport końcowy.
+## Running The Project
 
-Ograniczenia aktualnej wersji:
+### Generate The Dataset
 
-- dane są syntetyczne,
-- model i rekomender są prototypem decyzyjno-analitycznym,
-- dataset nie zawiera kolumny `age`; wiek jest używany tylko jako zewnętrzny parametr formularza i reguł bezpieczeństwa,
-- system nie jest narzędziem medycznym ani produkcyjnym systemem trenerskim.
+```bash
+python generator/main.py --users 100 --years 3 --output data/FINAL_ENGINE_V4.csv
+```
 
-## Autorzy
+Quick run without writing a CSV:
 
-Authors: Martino Sebastiani, Zuzanna Klimaszewska
+```bash
+python generator/main.py --users 5 --years 1 --no-save
+```
 
-Projekt przygotowany w kontekście studiów podyplomowych WSB Merito: Analiza Danych / Data Science z elementami AI.
+### Run EDA
+
+```bash
+python scripts/01_eda.py
+```
+
+EDA outputs are written to:
+
+```text
+outputs/eda_outputs/
+```
+
+### Train Models And Build Stage 2 Recommendations
+
+```bash
+python scripts/02_modeling_and_recommendation.py
+```
+
+This stage writes model comparison artifacts to `outputs/stage2_outputs/` and
+saves the selected model to:
+
+```text
+models/best_weight_prediction_model.joblib
+```
+
+### Run The End-to-End Demo
+
+```bash
+python scripts/03_system_demo.py
+```
+
+This stage requires the trained model from Stage 2 and writes weekly plan
+scenarios to:
+
+```text
+outputs/stage3_outputs/
+```
+
+### Run The Dashboard
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+The dashboard can show prepared demo assets without retraining. The `Live
+Generator` section requires `models/best_weight_prediction_model.joblib`.
+
+## Reports And Outputs
+
+Final report files:
+
+```text
+report/final_report.pdf
+report/final_report.docx
+```
+
+Presentation:
+
+```text
+presentation/Prezentacja.pptx
+```
+
+Selected images:
+
+- `report/images/dashboard_overview.png`
+- `report/images/dashboard_ml_model.png`
+- `report/images/dashboard_live_generator.png`
+- `report/images/model_mae_comparison.png`
+- `report/images/model_within_5kg_comparison.png`
+- `report/images/model_feature_importance_top20.png`
+- `report/images/eda_daily_volume_trend.png`
+
+Generated working outputs are stored under `outputs/`, but these folders are
+ignored by Git and can be recreated by running the project scripts.
+
+## Tests
+
+The repository currently does not include an automated test suite. Validation is
+performed through script-level checks, dataset sanity checks, generated reports,
+model metrics, and Streamlit review.
+
+Recommended future checks:
+
+```bash
+python -m compileall generator scripts src app
+```
+
+## Design Principles
+
+- Use synthetic data to avoid privacy risks from real training logs.
+- Keep each row at set level so it can be aggregated into exercises, sessions,
+  weeks, or users.
+- Build historical features with `shift(1)` to avoid leakage from the current
+  set into its own prediction.
+- Treat weight recommendation as a hybrid problem, not pure ML prediction.
+- Keep safety rules explicit and inspectable.
+- Store large generated artifacts outside version control.
+
+## Limitations & Future Work
+
+- The dataset is synthetic and should not be treated as proof of real-world
+  coaching effectiveness.
+- Recommendations are demonstrational and require expert validation before real
+  training use.
+- The dataset does not contain an `age` column; age is used only as an external
+  safety-rule input in recommendation scenarios.
+- The model artifact is generated locally and is not included in Git.
+- Add automated unit tests for the generator, feature engineering, and
+  recommender.
+- Add pinned dependency versions and an explicit Python version file.
+- Consider publishing the model artifact through GitHub Releases or Git LFS.
+- Add CI for smoke tests, linting, and dashboard import checks.
+- Expand the recommendation engine with richer user profiles, training goals,
+  injury constraints, and validation on real or expert-reviewed data.
+
+## Screenshots
+
+### Dashboard
+
+![Dashboard overview](report/images/dashboard_overview.png)
+![Dataset analysis](report/images/dashboard_dataset_user_analysis_1.png)
+![ML model](report/images/dashboard_ml_model.png)
+
+### Recommendation Demo
+
+![Recommendation demo](report/images/dashboard_recommendation_demo_1.png)
+![Recommendation demo details](report/images/dashboard_recommendation_demo_2.png)
+
+### Live Generator
+
+![Live generator](report/images/dashboard_live_generator_1.png)
+![Live generator output](report/images/dashboard_live_generator_2.png)
+
+### EDA And Model Outputs
+
+![Daily volume trend](report/images/eda_daily_volume_trend.png)
+![Model MAE comparison](report/images/model_mae_comparison.png)
+![Feature importance](report/images/model_feature_importance_top20.png)
+
+## Authors
+
+Martino Sebastiani and Zuzanna Klimaszewska
+
+Project prepared in the context of postgraduate studies at WSB Merito:
+Data Analysis / Data Science with AI elements.
